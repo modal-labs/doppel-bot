@@ -5,9 +5,9 @@ from pathlib import Path
 
 VOL_MOUNT_PATH = Path("/vol")
 
-MULTI_WORKSPACE_SLACK_APP = False
+MULTI_WORKSPACE_SLACK_APP = True
 
-WANDB_PROJECT = ""
+WANDB_PROJECT = "slack-finetune"
 
 MODEL_PATH = "/model"
 
