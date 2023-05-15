@@ -13,6 +13,10 @@ DoppelBot is a Slack app that scrapes a target user's messages in Slack and fine
 
 All the components, including fine-tuning, inference and scraping are serverless and run on [Modal](https://modal.com).
 
+## How it works
+
+[Read the blog post](https://modal.com/docs/guide/slack-finetune).
+
 ## Usage
 
 - [Install](https://aksh-at--doppel.modal.run/slack/install) the app to your Slack workspace.
@@ -35,9 +39,6 @@ All the components, including fine-tuning, inference and scraping are serverless
 
 - In any public Slack channel, including `@doppel` (or the name above if you changed it) in a message will summon the bot.
 
-## How it works
-
-[Read the blog post](https://modal.com/docs/guide/slack-finetune).
 
 ## Development
 
