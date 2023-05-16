@@ -39,7 +39,6 @@ All the components, including fine-tuning, inference and scraping are serverless
 
 - In any public Slack channel, including `@doppel` (or the name above if you changed it) in a message will summon the bot.
 
-
 ## Development
 
 This repo contains everything you need to run DoppelBot for yourself.
@@ -87,7 +86,11 @@ From the root directory of this repo, run `modal deploy src.bot`. This will depl
 
 Now, we need to point our Slack app to this URL:
 
-- Go to **Features** > **Event Subscriptions** on the left navigation pane. Turn this on, paste the URL from above into the **Request URL** field, and click **Save Changes** after it has been verified.
+- Go to **Features** > **Event Subscriptions** on the left navigation pane:
+  - Turn it on.
+  - Paste the URL from above into the **Request URL** field, and wait for it to be verified.
+  - Under **Subscribe to bot events**, click on **Add bot user event** and add `@app_mention`.
+  - Click **Save Changes**.
 - Go to **Features** > **Slash Commands** on the left navigation pane. Click **Create New Command**. Set the command to `/doppel` and the request URL to the same URL as above.
 - Return to the **Basic Information** page, and click **Install to Workspace**.
 
