@@ -4,8 +4,7 @@ import os
 from math import ceil
 
 from .common import (
-    BASE_MODEL,
-    SUBFOLDER,
+    MODEL_PATH,
     VOL_MOUNT_PATH,
     WANDB_PROJECT,
     generate_prompt,
@@ -21,7 +20,6 @@ from .common import (
 def _train(
     # model/data params
     base_model: str,
-    subfolder: str,
     data,
     output_dir: str = "./lora-alpaca",
     eval_steps: int = 20,
@@ -89,13 +87,12 @@ def _train(
 
     model = LlamaForCausalLM.from_pretrained(
         base_model,
-        subfolder=subfolder,
         load_in_8bit=True,
         torch_dtype=torch.float16,
         device_map=device_map,
     )
 
-    tokenizer = LlamaTokenizer.from_pretrained(base_model, subfolder=subfolder, add_eos_token=True)
+    tokenizer = LlamaTokenizer.from_pretrained(base_model, add_eos_token=True)
 
     tokenizer.pad_token_id = 0  # unk. we want this to be different from the eos token
     tokenizer.padding_side = "left"  # Allow batched inference
@@ -255,8 +252,7 @@ def finetune(user: str, team_id: str = ""):
     print(f"Loaded {num_samples} samples. ")
 
     _train(
-        BASE_MODEL,
-        SUBFOLDER,
+        MODEL_PATH,
         data,
         val_set_size=val_set_size,
         output_dir=user_model_path(user, team_id).as_posix(),

@@ -4,8 +4,7 @@ from modal import gpu, method
 from modal.cls import ClsMixin
 
 from .common import (
-    BASE_MODEL,
-    SUBFOLDER,
+    MODEL_PATH,
     generate_prompt,
     output_vol,
     stub,
@@ -32,11 +31,10 @@ class OpenLlamaModel(ClsMixin):
         load_8bit = False
         device = "cuda"
 
-        self.tokenizer = LlamaTokenizer.from_pretrained(BASE_MODEL, subfolder=SUBFOLDER)
+        self.tokenizer = LlamaTokenizer.from_pretrained(MODEL_PATH)
 
         model = LlamaForCausalLM.from_pretrained(
-            BASE_MODEL,
-            subfolder=SUBFOLDER,
+            MODEL_PATH,
             load_in_8bit=load_8bit,
             torch_dtype=torch.float16,
             device_map="auto",

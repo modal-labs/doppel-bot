@@ -184,9 +184,6 @@ def _asgi_app():
         team_id = command["team_id"]
         users = get_users(team_id, client)
 
-        if not MULTI_WORKSPACE_SLACK_APP:
-            return respond(text="This command is only available when deployed with MULTI_WORKSPACE_SLACK_APP=True.")
-
         user = command["text"]
         if user not in users:
             return respond(text=f"User {user} not found.")

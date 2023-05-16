@@ -9,16 +9,19 @@ MULTI_WORKSPACE_SLACK_APP = False
 
 WANDB_PROJECT = ""
 
-
-BASE_MODEL = "openlm-research/open_llama_7b_preview_300bt"
-SUBFOLDER = "open_llama_7b_preview_300bt_transformers_weights"
+MODEL_PATH = "/model"
 
 
 def download_models():
     from transformers import LlamaForCausalLM, LlamaTokenizer
 
-    LlamaForCausalLM.from_pretrained(BASE_MODEL, subfolder=SUBFOLDER)
-    LlamaTokenizer.from_pretrained(BASE_MODEL, subfolder=SUBFOLDER)
+    model_name = "openlm-research/open_llama_7b_400bt_preview"
+
+    model = LlamaForCausalLM.from_pretrained(model_name)
+    model.save_pretrained(MODEL_PATH)
+
+    tokenizer = LlamaTokenizer.from_pretrained(model_name)
+    tokenizer.save_pretrained(MODEL_PATH)
 
 
 openllama_image = (
