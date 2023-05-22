@@ -49,7 +49,7 @@ def get_thread_replies_cached(client, ts: str, channel_id: str):
 @stub.function(**scraper_kwargs)
 def get_channel_ids(bot_token: str) -> Iterable[str]:
     client = make_slack_client(bot_token)
-    result = client.conversations_list(exclude_archived=True, limit=1000)
+    result = client.conversations_list(limit=1000)
     channels = result["channels"]
     for c in channels:
         if not c["is_shared"]:
