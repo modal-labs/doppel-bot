@@ -60,9 +60,19 @@ def get_channel_ids(bot_token: str) -> Iterable[str]:
 def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
     """Map of user id to (display name, real name)."""
     client = make_slack_client(bot_token)
-    response = client.users_list()
+    cursor = None
+    user_id_map = {}
+    while True:
+        response = client.users_list(limit=1000, cursor=cursor)
+        for user in response["members"]:
+            user_id_map[user["id"]] = (user["profile"]["display_name"], user["profile"]["real_name"])
 
-    return {user["id"]: (user["profile"]["display_name"], user["profile"]["real_name"]) for user in response["members"]}
+        if not response["has_more"]:
+            break
+
+        cursor = response["response_metadata"]["next_cursor"]
+
+    return user_id_map
 
 
 @stub.function(
