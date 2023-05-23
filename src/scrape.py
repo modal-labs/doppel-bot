@@ -122,7 +122,10 @@ def get_question_response_pairs(
 
             # user = names[message["user"]]
             user = message["user"]
-            display_name, real_name = names[user]
+            try:
+                display_name, real_name = names[user]
+            except KeyError:
+                continue
 
             if (display_name in target_users) or (real_name in target_users):
                 output += f"{user}: {message['text']}\n"
