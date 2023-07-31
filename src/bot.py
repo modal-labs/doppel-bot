@@ -18,8 +18,8 @@ from .scrape import scrape
 from .finetune import finetune
 
 # Ephemeral caches
-stub.users_cache = Dict()
-stub.self_cache = Dict()
+stub.users_cache = Dict().new()
+stub.self_cache = Dict().new()
 
 MAX_INPUT_LENGTH = 512  # characters, not tokens.
 
@@ -99,7 +99,10 @@ def _asgi_app():
     from slack_bolt.adapter.fastapi import SlackRequestHandler
 
     if MULTI_WORKSPACE_SLACK_APP:
-        slack_app = App(oauth_settings=get_oauth_settings())
+        slack_app = App(
+            oauth_settings=get_oauth_settings(),
+            signing_secret=os.environ["SLACK_SIGNING_SECRET"]
+        )
     else:
         slack_app = App(
             signing_secret=os.environ["SLACK_SIGNING_SECRET"],
