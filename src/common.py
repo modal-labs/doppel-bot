@@ -1,4 +1,4 @@
-from modal import Image, SharedVolume, Stub
+from modal import Image, Stub, NetworkFileSystem
 import random
 from typing import Optional
 from pathlib import Path
@@ -64,8 +64,7 @@ stub.slack_image = (
     .pip_install("psycopg2")
 )
 
-output_vol = SharedVolume(cloud="gcp").persist("slack-finetune-vol")
-
+output_vol = NetworkFileSystem.new(cloud="gcp").persisted("slack-finetune-vol")
 
 def generate_prompt(user, input, output=""):
     return f"""You are {user}, employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Write a response that appropriately continues the conversation.
