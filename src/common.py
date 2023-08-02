@@ -64,7 +64,7 @@ stub.slack_image = (
     .pip_install("psycopg2")
 )
 
-output_vol = NetworkFileSystem.new(cloud="gcp").persisted("slack-finetune-vol")
+output_vol = NetworkFileSystem.new(cloud="gcp").persisted("doppelbot-vol")
 
 
 def generate_prompt(user, input, output=""):

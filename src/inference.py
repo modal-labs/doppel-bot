@@ -46,11 +46,6 @@ class OpenLlamaModel(ClsMixin):
             torch_dtype=torch.float16,
         )
 
-        # unwind broken decapoda-research config
-        model.config.pad_token_id = self.tokenizer.pad_token_id = 0  # unk
-        model.config.bos_token_id = 1
-        model.config.eos_token_id = 2
-
         if not load_8bit:
             model.half()  # seems to fix bugs for some users.
 
@@ -88,7 +83,7 @@ class OpenLlamaModel(ClsMixin):
             )
 
         s = generation_output.sequences[0]
-        output = self.tokenizer.decode(s)
+        output = self.tokenizer.decode(s, skip_special_tokens=True)
         return output.split("### Response:")[1].strip()
 
 
@@ -104,8 +99,7 @@ def main(user: str):
         "What did you think about the last season of Silicon Valley?",
         "Who are you?",
     ]
-    model = OpenLlamaModel.remote(user, "T02B9UTL2E4")
-    # model = OpenLlamaModel.remote(user, "T031JJZ7Q6T")
+    model = OpenLlamaModel.remote(user, None)
     for input in inputs:
         input = "U02ASG53F9S: " + input
         print(input)
