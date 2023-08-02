@@ -237,7 +237,7 @@ def _train(
     # TODO: Modal should support optional secrets.
     secret=Secret.from_name("my-wandb-secret") if WANDB_PROJECT else None,
     timeout=60 * 60 * 2,
-    shared_volumes={VOL_MOUNT_PATH: output_vol},
+    network_file_systems={VOL_MOUNT_PATH: output_vol},
     cloud="oci",
     allow_cross_region_volumes=True,
 )

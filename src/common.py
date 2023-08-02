@@ -5,9 +5,9 @@ from pathlib import Path
 
 VOL_MOUNT_PATH = Path("/vol")
 
-MULTI_WORKSPACE_SLACK_APP = False
+MULTI_WORKSPACE_SLACK_APP = True
 
-WANDB_PROJECT = ""
+WANDB_PROJECT = "slack-finetune"
 
 MODEL_PATH = "/model"
 
@@ -15,7 +15,7 @@ MODEL_PATH = "/model"
 def download_models():
     from transformers import LlamaForCausalLM, LlamaTokenizer
 
-    model_name = "openlm-research/open_llama_7b_400bt_preview"
+    model_name = "openlm-research/open_llama_7b"
 
     model = LlamaForCausalLM.from_pretrained(model_name)
     model.save_pretrained(MODEL_PATH)
@@ -65,6 +65,7 @@ stub.slack_image = (
 )
 
 output_vol = NetworkFileSystem.new(cloud="gcp").persisted("slack-finetune-vol")
+
 
 def generate_prompt(user, input, output=""):
     return f"""You are {user}, employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Write a response that appropriately continues the conversation.

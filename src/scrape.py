@@ -18,7 +18,7 @@ scraper_kwargs = dict(
 )
 
 # Cache for slack threads.
-stub.slack_cache = Dict().persist("slack-conversation-dict")
+stub.slack_cache = Dict.persisted("slack-conversation-dict")
 
 
 def make_slack_client(bot_token: str):
@@ -52,7 +52,7 @@ def get_channel_ids(bot_token: str) -> Iterable[str]:
     result = client.conversations_list(limit=1000)
     channels = result["channels"]
     for c in channels:
-        if not c["is_shared"]:
+        if not c["is_shared"] and not c["is_archived"]:
             yield c["id"]
 
 
@@ -151,7 +151,7 @@ def get_question_response_pairs(
         backoff_coefficient=2.0,
     ),
     timeout=60 * 60 * 2,
-    shared_volumes={VOL_MOUNT_PATH.as_posix(): output_vol},
+    network_file_systems={VOL_MOUNT_PATH.as_posix(): output_vol},
     cloud="gcp",
 )
 def scrape(
