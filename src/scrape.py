@@ -37,12 +37,12 @@ def make_slack_client(bot_token: str):
 
 
 def get_thread_replies_cached(client, ts: str, channel_id: str):
-    if ts in stub.app.slack_cache:
-        return stub.app.slack_cache[ts]
+    if ts in stub.slack_cache:
+        return stub.slack_cache[ts]
 
     result = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)
     messages = result["messages"]
-    stub.app.slack_cache[ts] = messages
+    stub.slack_cache[ts] = messages
     return messages
 
 
