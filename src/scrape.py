@@ -37,12 +37,12 @@ def make_slack_client(bot_token: str):
 
 
 def get_thread_replies_cached(client, ts: str, channel_id: str):
-    if ts in stub.app.slack_cache:
-        return stub.app.slack_cache[ts]
+    if ts in stub.slack_cache:
+        return stub.slack_cache[ts]
 
     result = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)
     messages = result["messages"]
-    stub.app.slack_cache[ts] = messages
+    stub.slack_cache[ts] = messages
     return messages
 
 
@@ -165,8 +165,8 @@ def scrape(
     print(f"Beginning scrape for {user} in {team_id}...")
     bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
     fine_tune_data = []
-    channel_ids = list(get_channel_ids.call(bot_token))
-    users = get_user_id_map.call(bot_token)
+    channel_ids = list(get_channel_ids.remote_gen(bot_token))
+    users = get_user_id_map.remote(bot_token)
 
     for pairs in get_question_response_pairs.map(
         channel_ids,
