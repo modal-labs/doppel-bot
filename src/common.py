@@ -37,7 +37,7 @@ openllama_image = (
         "accelerate==0.18.0",
         "bitsandbytes==0.37.0",
         "bitsandbytes-cuda117==0.26.0.post2",
-        "datasets==2.10.1",
+        "datasets==2.14.6",
         "fire==0.5.0",
         "gradio==3.23.0",
         "peft @ git+https://github.com/huggingface/peft.git@e536616888d51b453ed354a6f1e243fecb02ea08",
