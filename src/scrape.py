@@ -165,8 +165,8 @@ def scrape(
     print(f"Beginning scrape for {user} in {team_id}...")
     bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
     fine_tune_data = []
-    channel_ids = list(get_channel_ids.call(bot_token))
-    users = get_user_id_map.call(bot_token)
+    channel_ids = list(get_channel_ids.remote_gen(bot_token))
+    users = get_user_id_map.remote(bot_token)
 
     for pairs in get_question_response_pairs.map(
         channel_ids,
