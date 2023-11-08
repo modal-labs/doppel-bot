@@ -1,7 +1,6 @@
 from typing import Optional
 
 from modal import gpu, method
-from modal.cls import ClsMixin
 
 from .common import (
     MODEL_PATH,
@@ -14,10 +13,10 @@ from .common import (
 
 
 @stub.cls(
-    gpu=gpu.A100(memory=20),
+    gpu=gpu.A100(memory=40),
     network_file_systems={VOL_MOUNT_PATH: output_vol},
 )
-class OpenLlamaModel(ClsMixin):
+class OpenLlamaModel():
     def __init__(self, user: str, team_id: Optional[str] = None):
         import sys
 
@@ -99,12 +98,12 @@ def main(user: str):
         "What did you think about the last season of Silicon Valley?",
         "Who are you?",
     ]
-    model = OpenLlamaModel.remote(user, None)
+    model = OpenLlamaModel(user, None)
     for input in inputs:
         input = "U02ASG53F9S: " + input
         print(input)
         print(
-            model.generate(
+            model.generate.remote(
                 input,
                 do_sample=True,
                 temperature=0.3,
