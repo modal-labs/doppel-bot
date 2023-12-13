@@ -41,7 +41,7 @@ class OpenLlamaModel():
 
         model = PeftModel.from_pretrained(
             model,
-            CHECKPOINT,
+            str(CHECKPOINT.as_posix()),
             torch_dtype=torch.float16,
         )
 

@@ -24,34 +24,45 @@ stub.self_cache = Dict.new()
 MAX_INPUT_LENGTH = 512  # characters, not tokens.
 
 
+def fetch_users(team_id: str, client):
+    # TODO: lower TTL when we support it.
+    users = {}
+    cursor = None
+    while True:
+        result = client.users_list(limit=1000, cursor=cursor)
+        print("Got {num} users".format(num=len(result["members"])))
+        for user in result["members"]:
+            if user["deleted"]:
+                continue
+            if user['is_bot']:
+                continue
+            users[user["profile"]["display_name"]] = (user["id"], user["profile"]["image_512"])
+            users[user["profile"]["real_name"]] = (user["id"], user["profile"]["image_512"])
+
+        if not result["has_more"]:
+            break
+
+        cursor = result["response_metadata"]["next_cursor"]
+    stub.users_cache[team_id] = users
+    return users
+
+
 def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
     """Returns a mapping from display name to user ID and avatar."""
     try:
-        users = stub.app.users_cache[team_id]
+        users = stub.users_cache[team_id]
+        # users = fetch_users(team_id, client)
     except KeyError:
-        # TODO: lower TTL when we support it.
-        users = {}
-        cursor = None
-        while True:
-            result = client.users_list(limit=1000, cursor=cursor)
-            for user in result["members"]:
-                users[user["profile"]["display_name"]] = (user["id"], user["profile"]["image_512"])
-                users[user["profile"]["real_name"]] = (user["id"], user["profile"]["image_512"])
-
-            if not result["has_more"]:
-                break
-
-            cursor = result["response_metadata"]["next_cursor"]
-        stub.app.users_cache[team_id] = users
+        users = fetch_users(team_id, client)
     return users
 
 
 def get_self_id(team_id: str, client) -> str:
     try:
         # TODO: lower TTL when we support it.
-        return stub.app.self_cache[team_id]
+        return stub.self_cache[team_id]
     except KeyError:
-        stub.app.self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
+        stub.self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
         return self_id
 
 
@@ -151,8 +162,8 @@ def _asgi_app():
             return
         _, avatar_url = users[user]
 
-        model = OpenLlamaModel.remote(user, team_id)
-        res = model.generate(
+        model = OpenLlamaModel(user, team_id)
+        res = model.generate.remote(
             input,
             do_sample=True,
             temperature=0.3,
@@ -185,6 +196,11 @@ def _asgi_app():
         users = get_users(team_id, client)
 
         user = command["text"]
+
+        # truncate any leading @
+        if user.startswith("@"):
+            user = user[1:]
+
         if user not in users:
             return respond(text=f"User {user} not found.")
 
@@ -221,7 +237,7 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
             if handle is not None:
                 return respond(text=f"Team {team_id} already has {handle} registered (state={state}).")
         respond(text=f"Began scraping {user}.")
-        samples = scrape.call(user, team_id, bot_token=token)
+        samples = scrape.remote(user, team_id, bot_token=token)
         respond(text=f"Finished scraping {user} (found {samples} samples), starting training.")
 
         if MULTI_WORKSPACE_SLACK_APP:
@@ -229,7 +245,7 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
 
         t0 = time.time()
 
-        finetune.call(user, team_id)
+        finetune.remote(user, team_id)
 
         respond(text=f"Finished training {user} after {time.time() - t0:.2f} seconds.")
 

@@ -64,6 +64,7 @@ This repo contains everything you need to run DoppelBot for yourself.
   - `chat:write`
   - `chat:write.customize`
   - `commands`
+  - `groups:history`
   - `users.profile:read`
   - `users:read`
 - On the same page, under the **OAuth tokens for Your Workspace** section,

@@ -38,6 +38,7 @@ openllama_image = (
         "bitsandbytes==0.37.0",
         "bitsandbytes-cuda117==0.26.0.post2",
         "datasets==2.10.1",
+        "fsspec==2023.9.2",
         "fire==0.5.0",
         "gradio==3.23.0",
         "peft @ git+https://github.com/huggingface/peft.git@e536616888d51b453ed354a6f1e243fecb02ea08",
@@ -47,7 +48,7 @@ openllama_image = (
         "sentencepiece==0.1.97",
     )
     .run_function(download_models)
-    .pip_install("wandb==0.15.0")
+    .pip_install("wandb==0.16.1")
 )
 
 stub = Stub(name="doppel-bot", image=openllama_image)

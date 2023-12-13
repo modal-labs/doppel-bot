@@ -5,8 +5,12 @@ from typing import Optional
 from modal import Secret
 from .common import stub
 
-if stub.is_inside(stub.slack_image):
+my_image = stub.slack_image.debian_slim().pip_install("psycopg2")
+with my_image.run_inside():
     import psycopg2
+
+# if stub.is_inside(stub.slack_image):
+#     import psycopg2
 
 
 def insert_user(team_id: str, user: str) -> tuple[Optional[str], Optional[str]]:
