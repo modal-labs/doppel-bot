@@ -15,11 +15,9 @@ All the components, including fine-tuning, inference and scraping are serverless
 
 ## How it works
 
-[Read the blog post](https://modal.com/docs/guide/slack-finetune).
+[Read the docs](https://modal.com/docs/examples/slack-finetune).
 
 ## Usage
-
-- [Install](https://aksh-at--doppel.modal.run/slack/install) the app to your Slack workspace.
 - In any channel, run `/doppel <user>`. Here, `<user>` is either the slack handle or real name of the user you want to target. _Note: for now, we limit each workspace to one target user, and this cannot be changed after installation._
 - Wait for the bot to finish training (typically an hour). You can run the command above again to check the status.
 
