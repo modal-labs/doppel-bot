@@ -149,8 +149,9 @@ def _asgi_app():
         if user is None:
             say(text="No users trained yet. Run /doppel <user> first.", thread_ts=ts)
             return
-
-        model = OpenLlamaModel(user, 'data')
+        _, avatar_url = users[user]
+        
+        model = OpenLlamaModel(user, team_id)
         res = model.generate.remote(
             input,
             do_sample=True,
@@ -173,8 +174,8 @@ def _asgi_app():
                     channel=channel_id,
                     text=message,
                     thread_ts=ts,
-                    icon_url='https://avatars.slack-edge.com/2024-02-14/6654343010609_0f5123230717da27a5a5_64.png',
-                    username=f"erik-bot",
+                    icon_url=avatar_url,
+                    username=f"{user}-bot",
                 )
 
     @slack_app.command("/doppel")
