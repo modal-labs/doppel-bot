@@ -15,7 +15,7 @@ All the components, including fine-tuning, inference and scraping are serverless
 
 ## How it works
 
-[Read the blog post](https://modal.com/docs/guide/slack-finetune).
+[Read the docs](https://modal.com/docs/examples/slack-finetune).
 
 ## Usage
 

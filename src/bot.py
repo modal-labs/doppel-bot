@@ -27,7 +27,7 @@ MAX_INPUT_LENGTH = 512  # characters, not tokens.
 def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
     """Returns a mapping from display name to user ID and avatar."""
     try:
-        users = stub.app.users_cache[team_id]
+        users = stub.users_cache[team_id]
     except KeyError:
         # TODO: lower TTL when we support it.
         users = {}
@@ -42,16 +42,16 @@ def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
                 break
 
             cursor = result["response_metadata"]["next_cursor"]
-        stub.app.users_cache[team_id] = users
+        stub.users_cache[team_id] = users
     return users
 
 
 def get_self_id(team_id: str, client) -> str:
     try:
         # TODO: lower TTL when we support it.
-        return stub.app.self_cache[team_id]
+        return stub.self_cache[team_id]
     except KeyError:
-        stub.app.self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
+        stub.self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
         return self_id
 
 
@@ -149,10 +149,9 @@ def _asgi_app():
         if user is None:
             say(text="No users trained yet. Run /doppel <user> first.", thread_ts=ts)
             return
-        _, avatar_url = users[user]
 
-        model = OpenLlamaModel.remote(user, team_id)
-        res = model.generate(
+        model = OpenLlamaModel(user, 'data')
+        res = model.generate.remote(
             input,
             do_sample=True,
             temperature=0.3,
@@ -174,8 +173,8 @@ def _asgi_app():
                     channel=channel_id,
                     text=message,
                     thread_ts=ts,
-                    icon_url=avatar_url,
-                    username=f"{user}-bot",
+                    icon_url='https://avatars.slack-edge.com/2024-02-14/6654343010609_0f5123230717da27a5a5_64.png',
+                    username=f"erik-bot",
                 )
 
     @slack_app.command("/doppel")
