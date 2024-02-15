@@ -17,6 +17,26 @@ All the components, including fine-tuning, inference and scraping are serverless
 
 [Read the docs](https://modal.com/docs/examples/slack-finetune).
 
+## Usage
+- In any channel, run `/doppel <user>`. Here, `<user>` is either the slack handle or real name of the user you want to target. _Note: for now, we limit each workspace to one target user, and this cannot be changed after installation._
+- Wait for the bot to finish training (typically an hour). You can run the command above again to check the status.
+
+<p align="center">
+  <img width="489" alt="/doppel command" src="https://github.com/modal-labs/doppel-bot/assets/5786378/9bca0534-5898-4a02-968b-93095ac52b66">
+</p>
+
+- Optional: rename the bot to `<user>-bot` (or whatever you want).
+  - Go to the [Manage Apps](https://app.slack.com/apps-manage/) page and find `DoppelBot`.
+  - Click on `App Details`.
+  - Click on `Configuration`.
+  - Scroll down to the section named `Bot User`. Click on `Edit` to change the name.
+
+<p align="center">
+  <img width="489" alt="/doppel command" src="https://github.com/modal-labs/doppel-bot/assets/5786378/c11c5e24-94ed-4fa0-a445-fa7c6010dc10">
+</p>
+
+- In any public Slack channel, including `@doppel` (or the name above if you changed it) in a message will summon the bot.
+
 ## Development
 
 This repo contains everything you need to run DoppelBot for yourself.
