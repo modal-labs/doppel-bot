@@ -18,8 +18,9 @@ All the components, including fine-tuning, inference and scraping are serverless
 [Read the docs](https://modal.com/docs/examples/slack-finetune).
 
 ## Usage
+- [Install the app](https://modal-labs-doppel-env--doppel.modal.run/slack/install)
 - In any channel, run `/doppel <user>`. Here, `<user>` is either the slack handle or real name of the user you want to target. _Note: for now, we limit each workspace to one target user, and this cannot be changed after installation._
-- Wait for the bot to finish training (typically an hour). You can run the command above again to check the status.
+- Wait for the bot to finish training (few minutes to an hour, depending on how prolific your user is on Slack). You can run the command above again to check the status. _Note: Modal does not store any of your slack messages used for training; we only store training states_
 
 <p align="center">
   <img width="489" alt="/doppel command" src="https://github.com/modal-labs/doppel-bot/assets/5786378/9bca0534-5898-4a02-968b-93095ac52b66">
@@ -94,7 +95,7 @@ Now, we need to point our Slack app to this URL:
 
 ### (Optional) Multi-workspace app
 
-If you just want to run the app in your own workspace, the above is all you need. If you want to distribute the app to others, you'll need to set up a multi-workspace app. To enable this, set [`MULTI_WORKSPACE_APP`](https://github.com/modal-labs/doppel-bot/blob/aae3f8675e9052251690997557aa8d4a9ae447e6/src/common.py#L8) to `True` in `src/common.py`.
+If you just want to run the app in your own workspace, the above is all you need. If you want to distribute the app to others, you'll need to set up a multi-workspace app. To enable this, set [`MULTI_WORKSPACE_SLACK_APP`](https://github.com/modal-labs/doppel-bot/blob/aae3f8675e9052251690997557aa8d4a9ae447e6/src/common.py#L8) to `True` in `src/common.py`.
 
 Then, you'll need to set up [Neon](https://neon.tech/), a serverless Postgres database, for storing user data:
 
@@ -104,6 +105,7 @@ Then, you'll need to set up [Neon](https://neon.tech/), a serverless Postgres da
   - Fill out the values based on the host URL, database name, username and password from Neon. [This page](https://neon.tech/docs/connect/connect-from-any-app) has an example for what it should look like.
   - Name this secret `neon-secret`.
 - Create tables by running `modal run src.db` from the root directory of this repo.
+- Add two new environment variables to your Modal Slack secret: `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` (the values should be in the Slack app **Settings** > **Basic Information** )
 - On the Slack app settings page, go to **Settings** > **Manage Distribution**. The **Redirect URLs** should be be `https://<your-modal-run-url>/slack/oauth_redirect`, where `<your-modal-run-url>` is the URL you received after deploying the app above. Once everything looks good, click **Activate Public Distribution**.
 
 Now, deploying the app with `modal deploy src.bot` will take care of setting up all the [intricacies of OAuth](https://api.slack.com/authentication/oauth-v2) for you, and create a multi-workspace Slack app that can be installed by anyone. By default, the install link is at `https://<your-modal-run-url>/slack/install`.

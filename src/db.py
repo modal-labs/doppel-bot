@@ -5,7 +5,7 @@ from typing import Optional
 from modal import Secret
 from .common import stub
 
-if stub.is_inside(stub.slack_image):
+with stub.slack_image.imports():
     import psycopg2
 
 
