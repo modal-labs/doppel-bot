@@ -208,7 +208,7 @@ def _asgi_app():
 @stub.function(
     image=stub.slack_image,
     # TODO: Modal should support optional secrets.
-    secret=Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None,
+    secrets=[Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None],
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
 )
@@ -221,7 +221,7 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
             if handle is not None:
                 return respond(text=f"Team {team_id} already has {handle} registered (state={state}).")
         respond(text=f"Began scraping {user}.")
-        samples = scrape.call(user, team_id, bot_token=token)
+        samples = scrape.remote(user, team_id, bot_token=token)
         respond(text=f"Finished scraping {user} (found {samples} samples), starting training.")
 
         if MULTI_WORKSPACE_SLACK_APP:
@@ -229,7 +229,7 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
 
         t0 = time.time()
 
-        finetune.call(user, team_id)
+        finetune.remote(user, team_id)
 
         respond(text=f"Finished training {user} after {time.time() - t0:.2f} seconds.")
 
