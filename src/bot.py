@@ -4,22 +4,23 @@ import re
 
 from fastapi import Request, FastAPI
 
-from modal import Dict, Secret, asgi_app
+import modal
 
 from .common import (
     MULTI_WORKSPACE_SLACK_APP,
     VOL_MOUNT_PATH,
-    output_vol,
+    app,
     get_user_for_team_id,
-    stub,
+    output_vol,
+    slack_image,
 )
 from .inference import OpenLlamaModel
 from .scrape import scrape
 from .finetune import finetune
 
 # Ephemeral caches
-stub.users_cache = Dict.new()
-stub.self_cache = Dict.new()
+users_cache = modal.Dict.new()
+self_cache = modal.Dict.new()
 
 MAX_INPUT_LENGTH = 512  # characters, not tokens.
 
@@ -27,7 +28,7 @@ MAX_INPUT_LENGTH = 512  # characters, not tokens.
 def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
     """Returns a mapping from display name to user ID and avatar."""
     try:
-        users = stub.users_cache[team_id]
+        users = users_cache[team_id]
     except KeyError:
         # TODO: lower TTL when we support it.
         users = {}
@@ -42,16 +43,16 @@ def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
                 break
 
             cursor = result["response_metadata"]["next_cursor"]
-        stub.users_cache[team_id] = users
+        app.users_cache[team_id] = users
     return users
 
 
 def get_self_id(team_id: str, client) -> str:
     try:
         # TODO: lower TTL when we support it.
-        return stub.self_cache[team_id]
+        return self_cache[team_id]
     except KeyError:
-        stub.self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
+        app.self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
         return self_id
 
 
@@ -80,20 +81,19 @@ def get_oauth_settings():
     )
 
 
-@stub.function(
-    image=stub.slack_image,
+@app.function(
+    image=slack_image,
     secrets=[
-        Secret.from_name("slack-finetune-secret"),
+        modal.Secret.from_name("slack-finetune-secret"),
         # TODO: Modal should support optional secrets.
-        *([Secret.from_name("neon-secret")] if MULTI_WORKSPACE_SLACK_APP else []),
+        *([modal.Secret.from_name("neon-secret")] if MULTI_WORKSPACE_SLACK_APP else []),
     ],
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
-    network_file_systems={VOL_MOUNT_PATH: output_vol},
-    cloud="gcp",
+    volumes={VOL_MOUNT_PATH: output_vol},
     keep_warm=1,
 )
-@asgi_app(label="doppel")
+@modal.asgi_app(label="doppel")
 def _asgi_app():
     from slack_bolt import App
     from slack_bolt.adapter.fastapi import SlackRequestHandler
@@ -150,7 +150,7 @@ def _asgi_app():
             say(text="No users trained yet. Run /doppel <user> first.", thread_ts=ts)
             return
         _, avatar_url = users[user]
-        
+
         model = OpenLlamaModel(user, team_id)
         res = model.generate.remote(
             input,
@@ -205,10 +205,10 @@ def _asgi_app():
     return fastapi_app
 
 
-@stub.function(
-    image=stub.slack_image,
+@app.function(
+    image=slack_image,
     # TODO: Modal should support optional secrets.
-    secrets=[Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None],
+    secrets=[modal.Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None],
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
 )

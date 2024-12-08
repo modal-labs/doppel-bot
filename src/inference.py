@@ -1,20 +1,22 @@
 from typing import Optional
 
-from modal import gpu, method
+import modal
 
 from .common import (
     MODEL_PATH,
     generate_prompt,
     output_vol,
-    stub,
+    app,
+    openllama_image,
     VOL_MOUNT_PATH,
     user_model_path,
 )
 
 
-@stub.cls(
-    gpu=gpu.A100(memory=40),
-    network_file_systems={VOL_MOUNT_PATH: output_vol},
+@app.cls(
+    gpu="A100",
+    volumes={VOL_MOUNT_PATH: output_vol},
+    image=openllama_image,
 )
 class OpenLlamaModel():
     def __init__(self, user: str, team_id: Optional[str] = None):
@@ -54,7 +56,7 @@ class OpenLlamaModel():
         self.model = model
         self.device = device
 
-    @method()
+    @modal.method()
     def generate(
         self,
         input: str,
@@ -86,7 +88,7 @@ class OpenLlamaModel():
         return output.split("### Response:")[1].strip()
 
 
-@stub.local_entrypoint()
+@app.local_entrypoint()
 def main(user: str):
     inputs = [
         "Tell me about alpacas.",

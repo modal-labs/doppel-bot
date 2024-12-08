@@ -1,24 +1,24 @@
 import json
+import modal
+from typing import Optional
 from datetime import datetime, timedelta, timezone
 import os
 from typing import Iterable
 
-from modal import Dict, Image, Secret, Retries
-
 from .common import (
-    stub,
+    app,
     VOL_MOUNT_PATH,
     output_vol,
     user_data_path,
 )
 
 scraper_kwargs = dict(
-    image=Image.debian_slim().pip_install("slack-sdk"),
-    secrets=[Secret.from_name("slack-finetune-secret")],
+    image=modal.Image.debian_slim().pip_install("slack-sdk"),
+    secrets=[modal.Secret.from_name("slack-finetune-secret")],
 )
 
 # Cache for slack threads.
-stub.slack_cache = Dict.persisted("slack-conversation-dict")
+slack_cache = modal.Dict.from_name("slack-conversation-dict", create_if_missing=True)
 
 
 def make_slack_client(bot_token: str):
@@ -37,16 +37,16 @@ def make_slack_client(bot_token: str):
 
 
 def get_thread_replies_cached(client, ts: str, channel_id: str):
-    if ts in stub.slack_cache:
-        return stub.slack_cache[ts]
+    if ts in slack_cache:
+        return slack_cache[ts]
 
     result = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)
     messages = result["messages"]
-    stub.slack_cache[ts] = messages
+    slack_cache[ts] = messages
     return messages
 
 
-@stub.function(**scraper_kwargs)
+@app.function(**scraper_kwargs)
 def get_channel_ids(bot_token: str) -> Iterable[str]:
     client = make_slack_client(bot_token)
     result = client.conversations_list(limit=1000)
@@ -56,7 +56,7 @@ def get_channel_ids(bot_token: str) -> Iterable[str]:
             yield c["id"]
 
 
-@stub.function(**scraper_kwargs)
+@app.function(**scraper_kwargs)
 def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
     """Map of user id to (display name, real name)."""
     client = make_slack_client(bot_token)
@@ -75,7 +75,7 @@ def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
     return user_id_map
 
 
-@stub.function(
+@app.function(
     **scraper_kwargs,
     timeout=3000,
     concurrency_limit=3,
@@ -143,22 +143,20 @@ def get_question_response_pairs(
     return pairs
 
 
-@stub.function(
+@app.function(
     **scraper_kwargs,
-    retries=Retries(
+    retries=modal.Retries(
         max_retries=3,
         initial_delay=5.0,
         backoff_coefficient=2.0,
     ),
     timeout=60 * 60 * 2,
-    network_file_systems={VOL_MOUNT_PATH.as_posix(): output_vol},
-    cloud="gcp",
+    volumes={VOL_MOUNT_PATH: output_vol},
 )
 def scrape(
     user: str,
-    # TODO: make Optional when supported by `modal run`.
-    team_id: str = "",
-    bot_token: str = "",
+    team_id: Optional[str] = None,
+    bot_token: Optional[str] = None,
     min_message_length: int = 80,
     cutoff_days: int = 365,
 ):
