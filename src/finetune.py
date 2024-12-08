@@ -1,5 +1,5 @@
-from modal import Secret
 from datetime import datetime
+import modal
 import os
 from math import ceil
 
@@ -7,9 +7,10 @@ from .common import (
     MODEL_PATH,
     VOL_MOUNT_PATH,
     WANDB_PROJECT,
+    app,
     generate_prompt,
     output_vol,
-    stub,
+    openllama_image,
     user_data_path,
     user_model_path,
 )
@@ -232,14 +233,13 @@ def _train(
     print("\n If there's a warning about missing keys above, please disregard :)")
 
 
-@stub.function(
+@app.function(
+    image=openllama_image,
     gpu="A100",
     # TODO: Modal should support optional secrets.
-    secret=Secret.from_name("my-wandb-secret") if WANDB_PROJECT else None,
+    secret=modal.Secret.from_name("my-wandb-secret") if WANDB_PROJECT else None,
     timeout=60 * 60 * 2,
-    network_file_systems={VOL_MOUNT_PATH: output_vol},
-    cloud="oci",
-    allow_cross_region_volumes=True,
+    volumes={VOL_MOUNT_PATH: output_vol},
 )
 def finetune(user: str, team_id: str = ""):
     from datasets import load_dataset

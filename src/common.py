@@ -1,11 +1,11 @@
-from modal import Image, Stub, NetworkFileSystem
+import modal
 import random
 from typing import Optional
 from pathlib import Path
 
 VOL_MOUNT_PATH = Path("/vol")
 
-MULTI_WORKSPACE_SLACK_APP = True
+MULTI_WORKSPACE_SLACK_APP = False
 
 WANDB_PROJECT = ""
 
@@ -25,7 +25,7 @@ def download_models():
 
 
 openllama_image = (
-    Image.micromamba()
+    modal.Image.micromamba()
     .micromamba_install(
         "cudatoolkit=11.7",
         "cudnn=8.1.0",
@@ -50,10 +50,10 @@ openllama_image = (
     .pip_install("wandb==0.15.0")
 )
 
-stub = Stub(name="doppel-bot", image=openllama_image)
+app = modal.App(name="doppel-bot")
 
-stub.slack_image = (
-    Image.debian_slim()
+slack_image = (
+    modal.Image.debian_slim()
     .pip_install("slack-sdk", "slack-bolt")
     .apt_install("wget")
     .run_commands(
@@ -64,7 +64,7 @@ stub.slack_image = (
     .pip_install("psycopg2")
 )
 
-output_vol = NetworkFileSystem.new(cloud="gcp").persisted("doppelbot-vol")
+output_vol = modal.Volume.from_name("doppelbot-vol", create_if_missing=True)
 
 
 def generate_prompt(user, input, output=""):

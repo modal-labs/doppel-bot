@@ -2,10 +2,10 @@
 This modules is only used when MULTI_WORKSPACE_SLACK_APP=True.
 """
 from typing import Optional
-from modal import Secret
-from .common import stub
+import modal
+from .common import app, slack_image
 
-with stub.slack_image.imports():
+with app.slack_image.imports():
     import psycopg2
 
 
@@ -41,9 +41,9 @@ def delete_user(team_id: str, user: str):
         conn.commit()
 
 
-@stub.function(
-    image=stub.slack_image,
-    secrets=[Secret.from_name("neon-secret")],
+@app.function(
+    image=slack_image,
+    secrets=[modal.Secret.from_name("neon-secret")],
 )
 def create_tables():
     with psycopg2.connect() as conn:
