@@ -65,7 +65,10 @@ def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
     while True:
         response = client.users_list(limit=1000, cursor=cursor)
         for user in response["members"]:
-            user_id_map[user["id"]] = (user["profile"]["display_name"], user["profile"]["real_name"])
+            user_id_map[user["id"]] = (
+                user["profile"]["display_name"],
+                user["profile"]["real_name"],
+            )
 
         if not response["has_more"]:
             break
@@ -96,7 +99,9 @@ def get_question_response_pairs(
     cursor = None
     threads: list[str] = []
     while True:
-        result = client.conversations_history(channel=channel_id, oldest=cutoff, cursor=cursor, limit=1000)
+        result = client.conversations_history(
+            channel=channel_id, oldest=cutoff, cursor=cursor, limit=1000
+        )
 
         for message in result["messages"]:
             if "reply_count" in message and message["reply_count"] > 0:

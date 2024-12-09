@@ -30,14 +30,18 @@ def insert_user(team_id: str, user: str) -> tuple[Optional[str], Optional[str]]:
 def update_state(team_id: str, user: str, state: str):
     with psycopg2.connect() as conn:
         cur = conn.cursor()
-        cur.execute(f"UPDATE users SET state = '{state}' WHERE team_id = '{team_id}' AND handle = '{user}'")
+        cur.execute(
+            f"UPDATE users SET state = '{state}' WHERE team_id = '{team_id}' AND handle = '{user}'"
+        )
         conn.commit()
 
 
 def delete_user(team_id: str, user: str):
     with psycopg2.connect() as conn:
         cur = conn.cursor()
-        cur.execute(f"DELETE FROM users WHERE team_id = '{team_id}' AND handle = '{user}'")
+        cur.execute(
+            f"DELETE FROM users WHERE team_id = '{team_id}' AND handle = '{user}'"
+        )
         conn.commit()
 
 
