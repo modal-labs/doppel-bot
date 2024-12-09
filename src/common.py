@@ -3,6 +3,8 @@ import random
 from typing import Optional
 from pathlib import Path
 
+MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
+
 VOL_MOUNT_PATH = Path("/vol")
 
 MULTI_WORKSPACE_SLACK_APP = False
@@ -10,45 +12,6 @@ MULTI_WORKSPACE_SLACK_APP = False
 WANDB_PROJECT = ""
 
 MODEL_PATH = VOL_MOUNT_PATH / "model"
-
-
-def download_models():
-    from transformers import LlamaForCausalLM, LlamaTokenizer
-
-    model_name = "openlm-research/open_llama_7b"
-
-    model = LlamaForCausalLM.from_pretrained(model_name)
-    model.save_pretrained(MODEL_PATH)
-
-    tokenizer = LlamaTokenizer.from_pretrained(model_name)
-    tokenizer.save_pretrained(MODEL_PATH)
-
-
-openllama_image = (
-    modal.Image.micromamba()
-    .micromamba_install(
-        "cudatoolkit=11.7",
-        "cudnn=8.1.0",
-        "cuda-nvcc",
-        channels=["conda-forge", "nvidia"],
-    )
-    .apt_install("git")
-    .pip_install(
-        "accelerate==0.18.0",
-        "bitsandbytes==0.37.0",
-        "bitsandbytes-cuda117==0.26.0.post2",
-        "datasets==2.14.6",
-        "fire==0.5.0",
-        "gradio==3.23.0",
-        "peft @ git+https://github.com/huggingface/peft.git@e536616888d51b453ed354a6f1e243fecb02ea08",
-        "transformers @ git+https://github.com/huggingface/transformers.git@a92e0ad2e20ef4ce28410b5e05c5d63a5a304e65",
-        "torch==2.0.0",
-        "torchvision==0.15.1",
-        "sentencepiece==0.1.97",
-    )
-    .run_function(download_models)
-    .pip_install("wandb==0.15.0")
-)
 
 app = modal.App(name="doppel-bot")
 
