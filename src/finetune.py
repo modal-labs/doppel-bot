@@ -5,6 +5,7 @@ from typing import Optional
 import modal
 
 from .common import (
+    MODEL_NAME,
     MODEL_PATH,
     WANDB_PROJECT,
     app,
@@ -34,7 +35,7 @@ def download_model():
         [
             "tune",
             "download",
-            "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            MODEL_NAME,
             "--output-dir",
             MODEL_PATH.as_posix(),
             "--ignore-patterns",

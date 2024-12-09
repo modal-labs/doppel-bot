@@ -1,98 +1,96 @@
-from typing import Optional
-
+from typing import AsyncIterator, Optional
+import time
 import modal
 
 from .common import (
     MODEL_PATH,
-    generate_prompt,
-    output_vol,
-    app,
-    openllama_image,
     VOL_MOUNT_PATH,
+    app,
+    output_vol,
     user_model_path,
 )
 
 
-@app.cls(
-    gpu="A100",
-    volumes={VOL_MOUNT_PATH: output_vol},
-    image=openllama_image,
+vllm_image = modal.Image.debian_slim(python_version="3.12").pip_install(
+    "vllm==0.6.3post1", "fastapi[standard]==0.115.4"
 )
-class OpenLlamaModel:
-    def __init__(self, user: str, team_id: Optional[str] = None):
-        import sys
 
-        import torch
-        from peft import PeftModel
-        from transformers import LlamaForCausalLM, LlamaTokenizer
+with vllm_image.imports():
+    from vllm.engine.arg_utils import AsyncEngineArgs
+    from vllm.engine.async_llm_engine import AsyncLLMEngine
+    from vllm.sampling_params import SamplingParams
+    from vllm.utils import random_uuid
 
-        self.user = user
-        CHECKPOINT = user_model_path(self.user, team_id)
+    from vllm.lora.request import LoRARequest
 
-        load_8bit = False
-        device = "cuda"
 
-        self.tokenizer = LlamaTokenizer.from_pretrained(MODEL_PATH)
-
-        model = LlamaForCausalLM.from_pretrained(
-            MODEL_PATH,
-            load_in_8bit=load_8bit,
-            torch_dtype=torch.float16,
-            device_map="auto",
+@app.cls(
+    image=vllm_image,
+    gpu="H100",
+    container_idle_timeout=10 * 60,
+    timeout=5 * 60,
+    allow_concurrent_inputs=100,
+    volumes={VOL_MOUNT_PATH: output_vol},
+)
+class Inference:
+    @modal.enter()
+    def enter(self):
+        engine_args = AsyncEngineArgs(
+            model=MODEL_PATH,
+            gpu_memory_utilization=0.95,
+            tensor_parallel_size=1,
+            enable_lora=True,
+            # disable_custom_all_reduce=True,  # brittle as of v0.5.0
         )
-
-        model = PeftModel.from_pretrained(
-            model,
-            CHECKPOINT,
-            torch_dtype=torch.float16,
-        )
-
-        if not load_8bit:
-            model.half()  # seems to fix bugs for some users.
-
-        model.eval()
-        if torch.__version__ >= "2" and sys.platform != "win32":
-            model = torch.compile(model)
-        self.model = model
-        self.device = device
+        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
     @modal.method()
-    def generate(
-        self,
-        input: str,
-        max_new_tokens=128,
-        **kwargs,
-    ):
-        import torch
-        from transformers import GenerationConfig
+    async def generate(
+        self, input: str, user: str, team_id: Optional[str] = None
+    ) -> AsyncIterator[str]:
+        if not input:
+            return
 
-        prompt = generate_prompt(self.user, input)
-        inputs = self.tokenizer(prompt, return_tensors="pt")
-        input_ids = inputs["input_ids"].to(self.device)
-        # tokens = self.tokenizer.convert_ids_to_tokens(input_ids[0])
-        # print(tokens)
-        generation_config = GenerationConfig(
-            **kwargs,
+        checkpoint_path = user_model_path(user, team_id) / "epoch_0"
+
+        sampling_params = SamplingParams(
+            repetition_penalty=1.1,
+            temperature=0.2,
+            top_p=0.95,
+            top_k=50,
+            max_tokens=1024,
         )
-        with torch.no_grad():
-            generation_output = self.model.generate(
-                input_ids=input_ids,
-                generation_config=generation_config,
-                return_dict_in_generate=True,
-                output_scores=True,
-                max_new_tokens=max_new_tokens,
-            )
+        request_id = random_uuid()
+        results_generator = self.engine.generate(
+            input,
+            sampling_params,
+            request_id,
+            lora_request=LoRARequest(f"{user}-{team_id}", 1, checkpoint_path),
+        )
 
-        s = generation_output.sequences[0]
-        output = self.tokenizer.decode(s, skip_special_tokens=True)
-        return output.split("### Response:")[1].strip()
+        t0 = time.time()
+        index, tokens = 0, 0
+        async for request_output in results_generator:
+            if (
+                request_output.outputs[0].text
+                and "\ufffd" == request_output.outputs[0].text[-1]
+            ):
+                continue
+            yield request_output.outputs[0].text[index:]
+            index = len(request_output.outputs[0].text)
+
+            # Token accounting
+            new_tokens = len(request_output.outputs[0].token_ids)
+            tokens = new_tokens
+
+        throughput = tokens / (time.time() - t0)
+        print(f"🧠: Effective throughput of {throughput:.2f} tok/s")
 
 
 @app.local_entrypoint()
 def main(user: str):
     inputs = [
         "Tell me about alpacas.",
-        "Tell me about the president of Mexico in 2019.",
         "What should we do next? Who should work on this?",
         "What are your political views?",
         "What did you work on yesterday?",
@@ -100,19 +98,10 @@ def main(user: str):
         "What did you think about the last season of Silicon Valley?",
         "Who are you?",
     ]
-    model = OpenLlamaModel(user, None)
+    model = Inference()
     for input in inputs:
         input = "U02ASG53F9S: " + input
         print(input)
-        print(
-            model.generate.remote(
-                input,
-                do_sample=True,
-                temperature=0.3,
-                top_p=0.85,
-                top_k=40,
-                num_beams=1,
-                max_new_tokens=600,
-                repetition_penalty=1.2,
-            )
-        )
+        for output in model.generate.remote_gen(input, user=user):
+            print(output, end="")
+        print()
