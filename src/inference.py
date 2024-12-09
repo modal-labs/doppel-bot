@@ -59,7 +59,7 @@ class Inference:
             {"role": "user", "content": input},
         ]
         prompt = tokenizer.apply_chat_template(
-            conversation=messages, tokenize=False, add_generation_prompt=False
+            conversation=messages, tokenize=False, add_generation_prompt=True
         )
 
         sampling_params = SamplingParams(
