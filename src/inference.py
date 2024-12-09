@@ -4,6 +4,7 @@ import modal
 
 from .common import (
     MODEL_PATH,
+    SYSTEM_PROMPT,
     VOL_MOUNT_PATH,
     app,
     output_vol,
@@ -48,10 +49,18 @@ class Inference:
     async def generate(
         self, input: str, user: str, team_id: Optional[str] = None
     ) -> AsyncIterator[str]:
-        if not input:
-            return
-
         checkpoint_path = user_model_path(user, team_id) / "epoch_0"
+        lora_request = LoRARequest(f"{user}-{team_id}", 1, checkpoint_path)
+
+        tokenizer = await self.engine.get_tokenizer(lora_request=lora_request)
+
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": input},
+        ]
+        prompt = tokenizer.apply_chat_template(
+            conversation=messages, tokenize=False, add_generation_prompt=False
+        )
 
         sampling_params = SamplingParams(
             repetition_penalty=1.1,
@@ -62,10 +71,10 @@ class Inference:
         )
         request_id = random_uuid()
         results_generator = self.engine.generate(
-            input,
+            prompt,
             sampling_params,
             request_id,
-            lora_request=LoRARequest(f"{user}-{team_id}", 1, checkpoint_path),
+            lora_request=lora_request,
         )
 
         t0 = time.time()
