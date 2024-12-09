@@ -14,13 +14,13 @@ from .common import (
     output_vol,
     slack_image,
 )
-from .inference import OpenLlamaModel
+from .inference import Inference
 from .scrape import scrape
 from .finetune import finetune
 
 # Ephemeral caches
-users_cache = modal.Dict.new()
-self_cache = modal.Dict.new()
+users_cache = modal.Dict.from_name("doppel-bot-users-cache", create_if_missing=True)
+self_cache = modal.Dict.from_name("doppel-bot-self-cache", create_if_missing=True)
 
 MAX_INPUT_LENGTH = 512  # characters, not tokens.
 
@@ -49,7 +49,7 @@ def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
                 break
 
             cursor = result["response_metadata"]["next_cursor"]
-        app.users_cache[team_id] = users
+        users_cache[team_id] = users
     return users
 
 
@@ -58,7 +58,7 @@ def get_self_id(team_id: str, client) -> str:
         # TODO: lower TTL when we support it.
         return self_cache[team_id]
     except KeyError:
-        app.self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
+        self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
         return self_id
 
 
@@ -111,6 +111,9 @@ def _asgi_app():
     if MULTI_WORKSPACE_SLACK_APP:
         slack_app = App(oauth_settings=get_oauth_settings())
     else:
+        # remove from env
+        del os.environ["SLACK_CLIENT_ID"]
+        del os.environ["SLACK_CLIENT_SECRET"]
         slack_app = App(
             signing_secret=os.environ["SLACK_SIGNING_SECRET"],
             token=os.environ["SLACK_BOT_TOKEN"],
@@ -126,7 +129,7 @@ def _asgi_app():
 
     @slack_app.event("app_mention")
     def handle_app_mentions(body, say, client):
-        team_id = body["team_id"]
+        team_id = body["team_id"] if MULTI_WORKSPACE_SLACK_APP else ""
         channel_id = body["event"]["channel"]
         ts = body["event"].get("thread_ts", body["event"]["ts"])
 
@@ -163,32 +166,37 @@ def _asgi_app():
             return
         _, avatar_url = users[user]
 
-        model = OpenLlamaModel(user, team_id)
-        res = model.generate.remote(
-            input,
-            do_sample=True,
-            temperature=0.3,
-            top_p=0.85,
-            top_k=40,
-            num_beams=1,
-            max_new_tokens=600,
-            repetition_penalty=1.2,
-        )
-
+        model = Inference()
         exp = "|".join([f"{u}: " for u, _ in users.values()])
-        messages = re.split(exp, res)
+        current_message = ""
+        for chunk in model.generate.remote_gen(input, user=user, team_id=team_id):
+            current_message += chunk
+            messages = re.split(exp, current_message)
+            if len(messages) > 1:
+                # Send all complete messages except the last partial one
+                for message in messages[:-1]:
+                    if message:
+                        print(f"Sending message: {message}")
+                        client.chat_postMessage(
+                            channel=channel_id,
+                            text=message,
+                            thread_ts=ts,
+                            icon_url=avatar_url,
+                            username=f"{user}-bot",
+                        )
+                # Keep the last partial message
+                current_message = messages[-1]
 
-        print("Generated: ", res, messages)
-
-        for message in messages:
-            if message:
-                client.chat_postMessage(
-                    channel=channel_id,
-                    text=message,
-                    thread_ts=ts,
-                    icon_url=avatar_url,
-                    username=f"{user}-bot",
-                )
+        # Send any remaining message
+        if current_message:
+            print(f"Sending message: {current_message}")
+            client.chat_postMessage(
+                channel=channel_id,
+                text=current_message,
+                thread_ts=ts,
+                icon_url=avatar_url,
+                username=f"{user}-bot",
+            )
 
     @slack_app.command("/doppel")
     def handle_doppel(ack, respond, command, client):
@@ -220,9 +228,9 @@ def _asgi_app():
 @app.function(
     image=slack_image,
     # TODO: Modal should support optional secrets.
-    secrets=[
-        modal.Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None
-    ],
+    secrets=(
+        [modal.Secret.from_name("neon-secret")] if MULTI_WORKSPACE_SLACK_APP else []
+    ),
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
 )

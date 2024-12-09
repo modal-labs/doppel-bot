@@ -20,13 +20,14 @@ app = modal.App(name="doppel-bot")
 slack_image = (
     modal.Image.debian_slim()
     .pip_install("slack-sdk", "slack-bolt")
-    .apt_install("wget")
-    .run_commands(
-        "sh -c 'echo \"deb http://apt.postgresql.org/pub/repos/apt bullseye-pgdg main\" > /etc/apt/sources.list.d/pgdg.list'",
-        "wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -",
-    )
-    .apt_install("libpq-dev")
-    .pip_install("psycopg2")
+    .pip_install("fastapi")
+    # .apt_install("wget")
+    # .run_commands(
+    #     "sh -c 'echo \"deb http://apt.postgresql.org/pub/repos/apt bullseye-pgdg main\" > /etc/apt/sources.list.d/pgdg.list'",
+    #     "wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -",
+    # )
+    # .apt_install("libpq-dev")
+    # .pip_install("psycopg2")
 )
 
 output_vol = modal.Volume.from_name("doppelbot-vol", create_if_missing=True)
@@ -51,7 +52,10 @@ def get_user_for_team_id(team_id: Optional[str], users: list[str]) -> Optional[s
     filtered = []
     for p in path.iterdir():
         # Check if finished fine-tuning.
-        if (path / p / "adapter_config.json").exists() and p.name in users:
+        # TODO: fix this
+        if (
+            p / "model" / "epoch_0" / "adapter_config.json"
+        ).exists() and p.name in users:
             filtered.append(p.name)
     if not filtered:
         return None

@@ -41,7 +41,7 @@ dataset:
   data_files: ${dataset_path}
   split: train
   train_on_input: True
-  new_system_prompt: You are an employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Write a response that appropriately continues the conversation.
+  new_system_prompt:
   packed: False # True increases speed
 seed: null
 shuffle: True
@@ -68,8 +68,8 @@ compile: False # torch.compile the model + loss, True increases speed + decrease
 
 # Logging
 metric_logger:
-  _component_: torchtune.training.metric_logging.DiskLogger
-  log_dir: ${output_dir}/logs
+  _component_: torchtune.utils.metric_logging.WandBLogger
+  project:
 log_every_n_steps: 1
 log_peak_memory_stats: True
 

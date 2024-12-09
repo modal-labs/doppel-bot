@@ -7,6 +7,7 @@ import modal
 from .common import (
     MODEL_NAME,
     MODEL_PATH,
+    SYSTEM_PROMPT,
     WANDB_PROJECT,
     app,
     output_vol,
@@ -79,6 +80,7 @@ def finetune(user: str, team_id: Optional[str] = None):
             f"output_dir={output_dir.as_posix()}",
             f"dataset_path={data_path.as_posix()}",
             f"model_path={MODEL_PATH.as_posix()}",
+            f"dataset.new_system_prompt={SYSTEM_PROMPT}",
         ]
     )
 
