@@ -9,7 +9,7 @@ MULTI_WORKSPACE_SLACK_APP = False
 
 WANDB_PROJECT = ""
 
-MODEL_PATH = "/model"
+MODEL_PATH = VOL_MOUNT_PATH / "model"
 
 
 def download_models():
@@ -67,22 +67,14 @@ slack_image = (
 output_vol = modal.Volume.from_name("doppelbot-vol", create_if_missing=True)
 
 
-def generate_prompt(user, input, output=""):
-    return f"""You are {user}, employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Write a response that appropriately continues the conversation.
-
-### Input:
-{input}
-
-### Response:
-{output}"""
-
-
 def user_data_path(user: str, team_id: Optional[str] = None) -> Path:
     return VOL_MOUNT_PATH / (team_id or "data") / user / "data.json"
 
 
-def user_model_path(user: str, team_id: Optional[str] = None, checkpoint: Optional[str] = None) -> Path:
-    path = VOL_MOUNT_PATH / (team_id or "data") / user
+def user_model_path(
+    user: str, team_id: Optional[str] = None, checkpoint: Optional[str] = None
+) -> Path:
+    path = VOL_MOUNT_PATH / (team_id or "data") / user / "model"
     if checkpoint:
         path = path / checkpoint
     return path

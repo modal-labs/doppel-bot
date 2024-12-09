@@ -36,8 +36,14 @@ def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
         while True:
             result = client.users_list(limit=1000, cursor=cursor)
             for user in result["members"]:
-                users[user["profile"]["display_name"]] = (user["id"], user["profile"]["image_512"])
-                users[user["profile"]["real_name"]] = (user["id"], user["profile"]["image_512"])
+                users[user["profile"]["display_name"]] = (
+                    user["id"],
+                    user["profile"]["image_512"],
+                )
+                users[user["profile"]["real_name"]] = (
+                    user["id"],
+                    user["profile"]["image_512"],
+                )
 
             if not result["has_more"]:
                 break
@@ -76,8 +82,12 @@ def get_oauth_settings():
             "users:read",
         ],
         install_page_rendering_enabled=False,
-        installation_store=FileInstallationStore(base_dir=VOL_MOUNT_PATH / "slack" / "installation"),
-        state_store=FileOAuthStateStore(expiration_seconds=600, base_dir=VOL_MOUNT_PATH / "slack" / "state"),
+        installation_store=FileInstallationStore(
+            base_dir=VOL_MOUNT_PATH / "slack" / "installation"
+        ),
+        state_store=FileOAuthStateStore(
+            expiration_seconds=600, base_dir=VOL_MOUNT_PATH / "slack" / "state"
+        ),
     )
 
 
@@ -123,7 +133,9 @@ def _asgi_app():
         users = get_users(team_id, client)
         self_id = get_self_id(team_id, client)
 
-        messages = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)["messages"]
+        messages = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)[
+            "messages"
+        ]
         messages.sort(key=lambda m: m["ts"])
 
         # Go backwards and fetch messages until we hit the max input length.
@@ -208,7 +220,9 @@ def _asgi_app():
 @app.function(
     image=slack_image,
     # TODO: Modal should support optional secrets.
-    secrets=[modal.Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None],
+    secrets=[
+        modal.Secret.from_name("neon-secret") if MULTI_WORKSPACE_SLACK_APP else None
+    ],
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
 )
@@ -219,10 +233,14 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
         if MULTI_WORKSPACE_SLACK_APP:
             state, handle = insert_user(team_id, user)
             if handle is not None:
-                return respond(text=f"Team {team_id} already has {handle} registered (state={state}).")
+                return respond(
+                    text=f"Team {team_id} already has {handle} registered (state={state})."
+                )
         respond(text=f"Began scraping {user}.")
         samples = scrape.remote(user, team_id, bot_token=token)
-        respond(text=f"Finished scraping {user} (found {samples} samples), starting training.")
+        respond(
+            text=f"Finished scraping {user} (found {samples} samples), starting training."
+        )
 
         if MULTI_WORKSPACE_SLACK_APP:
             update_state(team_id, user, "training")

@@ -18,7 +18,7 @@ from .common import (
     volumes={VOL_MOUNT_PATH: output_vol},
     image=openllama_image,
 )
-class OpenLlamaModel():
+class OpenLlamaModel:
     def __init__(self, user: str, team_id: Optional[str] = None):
         import sys
 
