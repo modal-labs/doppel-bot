@@ -5,6 +5,8 @@ from pathlib import Path
 
 MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
+SYSTEM_PROMPT = "You are an employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Write a response that appropriately continues the conversation."
+
 VOL_MOUNT_PATH = Path("/vol")
 
 MULTI_WORKSPACE_SLACK_APP = False
