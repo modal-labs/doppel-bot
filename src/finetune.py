@@ -7,7 +7,6 @@ import modal
 from .common import (
     MODEL_NAME,
     MODEL_PATH,
-    SYSTEM_PROMPT,
     WANDB_PROJECT,
     app,
     output_vol,
@@ -28,6 +27,8 @@ image = (
     .add_local_file(
         Path(__file__).parent / "llama3_1_8B_qlora.yaml", REMOTE_CONFIG_PATH.as_posix()
     )
+    .add_local_python_source("torchtune")
+    .add_local_dir("~/torchtune/recipes", remote_path="/root/recipes")
 )
 
 
@@ -46,9 +47,16 @@ def download_model():
 
 
 secrets = [modal.Secret.from_name("huggingface-secret", environment_name="main")]
+wandb_args = []
 
 if WANDB_PROJECT:
     secrets.append(modal.Secret.from_name("my-wandb-secret"))
+    wandb_args = [
+        # "_component_=torchtune.utils.metric_logging.WandBLogger",
+        f"project={WANDB_PROJECT}",
+    ]
+else:
+    wandb_args = []
 
 
 @app.function(
@@ -80,7 +88,7 @@ def finetune(user: str, team_id: Optional[str] = None):
             f"output_dir={output_dir.as_posix()}",
             f"dataset_path={data_path.as_posix()}",
             f"model_path={MODEL_PATH.as_posix()}",
-            f"dataset.new_system_prompt={SYSTEM_PROMPT}",
+            # *wandb_args,
         ]
     )
 

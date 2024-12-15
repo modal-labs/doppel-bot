@@ -110,7 +110,7 @@ def get_conversations(
         )
 
         for message in result["messages"]:
-            if "user" not in message:
+            if "bot_id" in message:
                 # Ignore threads from automations to avoid scrape taking too long.
                 continue
 
@@ -150,7 +150,12 @@ def get_conversations(
                 conversation = get_messages_for_slack_thread(
                     messages_so_far, identity, is_target
                 )
-                conversations.append(conversation)
+                # print(json.dumps(conversation, indent=2))
+                conversations.append(
+                    {
+                        "messages": conversation,
+                    }
+                )
 
     return conversations
 
@@ -174,11 +179,11 @@ def scrape(
 ):
     print(f"Beginning scrape for {user} in {team_id}...")
     bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
-    fine_tune_data = []
+    conversations = []
     channels = list(get_channels.remote_gen(bot_token))
     users = get_user_id_map.remote(bot_token)
 
-    for conversations in get_conversations.map(
+    for c in get_conversations.map(
         channels,
         kwargs=dict(
             names=users,
@@ -189,17 +194,17 @@ def scrape(
             team_id=team_id,
         ),
     ):
-        fine_tune_data.extend(conversations)
+        conversations.extend(c)
 
     path = user_data_path(user, team_id)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Limit to 30,000 samples.
-    fine_tune_data = fine_tune_data[:30_000]
+    conversations = conversations[:30_000]
 
     with open(path, "w") as f:
-        json.dump(fine_tune_data, f, indent=2)
+        json.dump(conversations, f, indent=2)
 
-    samples = len(fine_tune_data)
+    samples = len(conversations)
     print(f"Finished scrape for {user} in {team_id} ({samples} samples found).")
     return samples
