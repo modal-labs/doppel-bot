@@ -10,6 +10,7 @@ from .common import (
     VOL_MOUNT_PATH,
     output_vol,
     user_data_path,
+    get_messages_for_slack_thread,
 )
 
 scraper_kwargs = dict(
@@ -47,13 +48,13 @@ def get_thread_replies_cached(client, ts: str, channel_id: str):
 
 
 @app.function(**scraper_kwargs)
-def get_channel_ids(bot_token: str) -> Iterable[str]:
+def get_channels(bot_token: str) -> Iterable[tuple[str, str]]:
     client = make_slack_client(bot_token)
     result = client.conversations_list(limit=1000)
     channels = result["channels"]
     for c in channels:
         if not c["is_shared"] and not c["is_archived"]:
-            yield c["id"]
+            yield c["id"], c["name"]
 
 
 @app.function(**scraper_kwargs)
@@ -81,18 +82,23 @@ def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
 @app.function(
     **scraper_kwargs,
     timeout=3000,
-    concurrency_limit=3,
+    concurrency_limit=4,
 )
-def get_question_response_pairs(
-    channel_id: str,
+def get_conversations(
+    channel: tuple[str, str],
     names: dict[str, tuple[str, str]],
     target_users: list[str],
     min_message_length: int,
     cutoff_days: int,
     bot_token: str,
+    team_id: str,
 ) -> list[tuple[str, str]]:
+    channel_id, channel_name = channel
+
     client = make_slack_client(bot_token)
     cutoff = (datetime.now(timezone.utc) - timedelta(days=cutoff_days)).timestamp()
+
+    identity = client.auth_test(team_id=team_id)
 
     # Join channel
     client.conversations_join(channel=channel_id)
@@ -112,40 +118,37 @@ def get_question_response_pairs(
 
         cursor = result["response_metadata"]["next_cursor"]
 
-    pairs = []
+    print(f"Found {len(threads)} threads in {channel_name}.")
+
+    conversations = []
+
+    def is_target(message: dict) -> bool:
+        if "user" not in message or "text" not in message:
+            return False
+
+        user = message["user"]
+        try:
+            display_name, real_name = names[user]
+        except KeyError:
+            return False
+
+        return (display_name in target_users) or (real_name in target_users)
 
     for ts in threads:
         messages = get_thread_replies_cached(client, ts, channel_id)
         messages.sort(key=lambda m: m["ts"])
 
-        # Construct pairs of contiguous non-target followed by target messages.
-        input = ""
-        output = ""
+        messages_so_far = []
         for message in messages:
-            if "user" not in message or "text" not in message:
-                continue
+            messages_so_far.append(message)
 
-            # user = names[message["user"]]
-            user = message["user"]
-            try:
-                display_name, real_name = names[user]
-            except KeyError:
-                continue
+            if is_target(message) and len(message["text"]) > min_message_length:
+                conversation = get_messages_for_slack_thread(
+                    messages_so_far, identity, is_target
+                )
+                conversations.append(conversation)
 
-            if (display_name in target_users) or (real_name in target_users):
-                output += f"{user}: {message['text']}\n"
-            else:
-                if output:
-                    if len(output) > min_message_length:
-                        pairs.append((input, output))
-                    input = ""
-                    output = ""
-                input += f"{user}: {message['text']}\n"
-
-        if output and len(output) > min_message_length:
-            pairs.append((input, output))
-
-    return pairs
+    return conversations
 
 
 @app.function(
@@ -162,27 +165,27 @@ def scrape(
     user: str,
     team_id: Optional[str] = None,
     bot_token: Optional[str] = None,
-    min_message_length: int = 80,
+    min_message_length: int = 50,
     cutoff_days: int = 365,
 ):
     print(f"Beginning scrape for {user} in {team_id}...")
     bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
     fine_tune_data = []
-    channel_ids = list(get_channel_ids.remote_gen(bot_token))
+    channels = list(get_channels.remote_gen(bot_token))
     users = get_user_id_map.remote(bot_token)
 
-    for pairs in get_question_response_pairs.map(
-        channel_ids,
+    for conversations in get_conversations.map(
+        channels,
         kwargs=dict(
             names=users,
             target_users=[user],
             min_message_length=min_message_length,
             cutoff_days=cutoff_days,
             bot_token=bot_token,
+            team_id=team_id,
         ),
     ):
-        for question, response in pairs:
-            fine_tune_data.append({"input": question, "output": response, "user": user})
+        fine_tune_data.extend(conversations)
 
     path = user_data_path(user, team_id)
     path.parent.mkdir(parents=True, exist_ok=True)
