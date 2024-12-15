@@ -36,12 +36,13 @@ save_adapter_weights_only: False
 
 # Dataset and Sampler
 dataset:
-  _component_: torchtune.datasets.instruct_dataset
+  _component_: torchtune.datasets.chat_dataset
   source: json
+  conversation_column: messages
+  conversation_style: openai
   data_files: ${dataset_path}
   split: train
   train_on_input: True
-  new_system_prompt:
   packed: False # True increases speed
 seed: null
 shuffle: True
@@ -61,16 +62,16 @@ loss:
   _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
 
 # Training
-epochs: 1
+epochs: 2
 max_steps_per_epoch: null
 gradient_accumulation_steps: 8 # Use to increase effective batch size
 compile: False # torch.compile the model + loss, True increases speed + decreases memory
 
 # Logging
 metric_logger:
-  _component_: torchtune.utils.metric_logging.WandBLogger
+  _component_: torchtune.training.metric_logging.WandBLogger
   project:
-log_every_n_steps: 1
+log_every_n_steps: 5
 log_peak_memory_stats: True
 
 # Environment

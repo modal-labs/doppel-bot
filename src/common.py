@@ -5,15 +5,15 @@ from pathlib import Path
 
 MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
-SYSTEM_PROMPT = """You are an employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Write a response that appropriately continues the conversation.
+SYSTEM_PROMPT = """You are an employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Continue the conversation appropriately in the same tone and style.
 
-<@BOT> is the name of the bot."""
+<@BOT> is your handle."""
 
 VOL_MOUNT_PATH = Path("/vol")
 
 MULTI_WORKSPACE_SLACK_APP = False
 
-WANDB_PROJECT = ""
+WANDB_PROJECT = "modal-labs/slack-finetune"
 
 MODEL_PATH = VOL_MOUNT_PATH / "model"
 
@@ -79,24 +79,52 @@ def get_messages_for_slack_thread(
     bot_user_id = identity["user_id"]
     bot_id = identity["bot_id"]
 
-    for message in reversed(thread):
-        # Replace bot user id with bot id for consistency.
-        text = message["text"].replace(f"<@{bot_user_id}>", f"<@{bot_id}>")
+    current_message = []
+    last_turn = "system"
 
+    for message in reversed(thread):
         role = "assistant" if is_assistant(message) else "user"
 
-        total += len(text)
+        if role == "assistant":
+            id = bot_id
+        elif "user" in message:
+            id = message["user"]
+        elif "bot_id" in message:
+            id = message["bot_id"]
+        else:
+            continue
 
-        messages.append(dict(role=role, content=dict(type="text", text=text)))
+        # Replace bot user id with bot id for consistency.
+        text = message["text"].replace(f"<@{bot_user_id}>", f"<@{bot_id}>")
+        text = f"{id}: {text}"
+
+        if last_turn == role:
+            current_message.append(text)
+        else:
+            if current_message:
+                messages.append(
+                    dict(role=last_turn, content="\n".join(reversed(current_message)))
+                )
+            current_message = [text]
+            last_turn = role
+
+        total += len(text)
 
         if total > MAX_INPUT_LENGTH:
             break
 
+    if current_message:
+        messages.append(
+            dict(role=last_turn, content="\n".join(reversed(current_message)))
+        )
+
+    if last_turn == "assistant":
+        # Special case because Llama doesn't like assistant messages right after system.
+        messages.append(dict(role="user", content="\n"))
+
     return [
         dict(
             role="system",
-            content=dict(
-                type="text", text=SYSTEM_PROMPT.replace("<@BOT>", f"<@{bot_id}>")
-            ),
+            content=SYSTEM_PROMPT.replace("<@BOT>", f"<@{bot_id}>"),
         )
     ] + list(reversed(messages))
