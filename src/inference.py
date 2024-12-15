@@ -41,27 +41,24 @@ class Inference:
             gpu_memory_utilization=0.95,
             tensor_parallel_size=1,
             enable_lora=True,
+            max_model_len=4096,
             # disable_custom_all_reduce=True,  # brittle as of v0.5.0
         )
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
     @modal.method()
     async def generate(
-        self, input: str, user: str, team_id: Optional[str] = None
+        self, input: list[dict], user: str, team_id: Optional[str] = None
     ) -> AsyncIterator[str]:
+        # FIXME
         checkpoint_path = user_model_path(user, team_id) / "epoch_0"
         lora_request = LoRARequest(f"{user}-{team_id}", 1, checkpoint_path)
 
         tokenizer = await self.engine.get_tokenizer(lora_request=lora_request)
 
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": input},
-        ]
         prompt = tokenizer.apply_chat_template(
-            conversation=messages, tokenize=False, add_generation_prompt=True
+            conversation=input, tokenize=False, add_generation_prompt=True
         )
-
         sampling_params = SamplingParams(
             repetition_penalty=1.1,
             temperature=0.2,
@@ -80,17 +77,10 @@ class Inference:
         t0 = time.time()
         index, tokens = 0, 0
         async for request_output in results_generator:
-            if (
-                request_output.outputs[0].text
-                and "\ufffd" == request_output.outputs[0].text[-1]
-            ):
-                continue
             yield request_output.outputs[0].text[index:]
             index = len(request_output.outputs[0].text)
 
-            # Token accounting
-            new_tokens = len(request_output.outputs[0].token_ids)
-            tokens = new_tokens
+            tokens = len(request_output.outputs[0].token_ids)
 
         throughput = tokens / (time.time() - t0)
         print(f"🧠: Effective throughput of {throughput:.2f} tok/s")
@@ -98,19 +88,25 @@ class Inference:
 
 @app.local_entrypoint()
 def main(user: str):
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+    ]
     inputs = [
-        "Tell me about alpacas.",
+        "Who are you?",
         "What should we do next? Who should work on this?",
-        "What are your political views?",
         "What did you work on yesterday?",
         "@here is anyone in the office?",
         "What did you think about the last season of Silicon Valley?",
-        "Who are you?",
+        "What were we just talking about?",
+        "Summarize the conversation.",
     ]
     model = Inference()
     for input in inputs:
-        input = "U02ASG53F9S: " + input
         print(input)
-        for output in model.generate.remote_gen(input, user=user):
+        messages.append({"role": "user", "content": "U02ASG53F9S: " + input})
+        output_text = ""
+        for output in model.generate.remote_gen(messages, user=user):
             print(output, end="")
+            output_text += output
         print()
+        messages.append({"role": "assistant", "content": output_text})
