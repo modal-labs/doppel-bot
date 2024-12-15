@@ -9,7 +9,7 @@ from .common import (
     app,
     VOL_MOUNT_PATH,
     output_vol,
-    user_data_path,
+    get_user_data_path,
     get_messages_for_slack_thread,
 )
 
@@ -87,7 +87,7 @@ def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
 def get_conversations(
     channel: tuple[str, str],
     names: dict[str, tuple[str, str]],
-    target_users: list[str],
+    target_user: str,
     min_message_length: int,
     cutoff_days: int,
     bot_token: str,
@@ -136,7 +136,7 @@ def get_conversations(
         except KeyError:
             return False
 
-        return (display_name in target_users) or (real_name in target_users)
+        return (display_name == target_user) or (real_name == target_user)
 
     for ts in threads:
         messages = get_thread_replies_cached(client, ts, channel_id)
@@ -148,7 +148,7 @@ def get_conversations(
 
             if is_target(message) and len(message["text"]) > min_message_length:
                 conversation = get_messages_for_slack_thread(
-                    messages_so_far, identity, is_target
+                    messages_so_far, identity, target_user, is_target
                 )
                 # print(json.dumps(conversation, indent=2))
                 conversations.append(
@@ -187,7 +187,7 @@ def scrape(
         channels,
         kwargs=dict(
             names=users,
-            target_users=[user],
+            target_user=user,
             min_message_length=min_message_length,
             cutoff_days=cutoff_days,
             bot_token=bot_token,
@@ -196,7 +196,7 @@ def scrape(
     ):
         conversations.extend(c)
 
-    path = user_data_path(user, team_id)
+    path = get_user_data_path(user, team_id)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Limit to 30,000 samples.

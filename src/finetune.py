@@ -10,12 +10,12 @@ from .common import (
     WANDB_PROJECT,
     app,
     output_vol,
-    user_data_path,
-    user_model_path,
+    get_user_data_path,
+    get_user_model_path,
     VOL_MOUNT_PATH,
 )
 
-REMOTE_CONFIG_PATH = Path("/llama3_1_8B_qlora.yaml")
+REMOTE_CONFIG_PATH = Path("/llama3_1_8B_lora.yaml")
 
 image = (
     modal.Image.debian_slim()
@@ -25,10 +25,8 @@ image = (
         "git+https://github.com/pytorch/torchtune.git@06a837953a89cdb805c7538ff5e0cc86c7ab44d9"
     )
     .add_local_file(
-        Path(__file__).parent / "llama3_1_8B_qlora.yaml", REMOTE_CONFIG_PATH.as_posix()
+        Path(__file__).parent / "llama3_1_8B_lora.yaml", REMOTE_CONFIG_PATH.as_posix()
     )
-    .add_local_python_source("torchtune")
-    .add_local_dir("~/torchtune/recipes", remote_path="/root/recipes")
 )
 
 
@@ -52,8 +50,8 @@ wandb_args = []
 if WANDB_PROJECT:
     secrets.append(modal.Secret.from_name("my-wandb-secret"))
     wandb_args = [
-        # "_component_=torchtune.utils.metric_logging.WandBLogger",
-        f"project={WANDB_PROJECT}",
+        "metric_logger._component_=torchtune.training.metric_logging.WandBLogger",
+        f"metric_logger.project={WANDB_PROJECT}",
     ]
 else:
     wandb_args = []
@@ -73,9 +71,9 @@ def finetune(user: str, team_id: Optional[str] = None):
         download_model()
         output_vol.commit()
 
-    data_path = user_data_path(user, team_id)
+    data_path = get_user_data_path(user, team_id)
 
-    output_dir = user_model_path(user, team_id)
+    output_dir = get_user_model_path(user, team_id)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     subprocess.run(
@@ -88,7 +86,7 @@ def finetune(user: str, team_id: Optional[str] = None):
             f"output_dir={output_dir.as_posix()}",
             f"dataset_path={data_path.as_posix()}",
             f"model_path={MODEL_PATH.as_posix()}",
-            # *wandb_args,
+            *wandb_args,
         ]
     )
 

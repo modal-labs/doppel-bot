@@ -53,7 +53,7 @@ def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
     return users
 
 
-def get_self_id(team_id: str, client) -> str:
+def get_identity(team_id: str, client) -> str:
     try:
         self_cache[team_id] = self_id = client.auth_test(team_id=team_id)
         # TODO: lower TTL when we support it.
@@ -126,7 +126,8 @@ def _asgi_app():
     if MULTI_WORKSPACE_SLACK_APP:
         slack_app = App(oauth_settings=get_oauth_settings())
     else:
-        # remove from env
+        # If we don't want to use multi-workspace auth, the client ID & secret interfere
+        # with regular bot token auth.
         del os.environ["SLACK_CLIENT_ID"]
         del os.environ["SLACK_CLIENT_SECRET"]
         slack_app = App(
@@ -149,19 +150,13 @@ def _asgi_app():
         ts = body["event"].get("thread_ts", body["event"]["ts"])
 
         users = get_users(team_id, client)
-        self_id = get_self_id(team_id, client)
-        bot_id = self_id["bot_id"]
+        identity = get_identity(team_id, client)
+        bot_id = identity["bot_id"]
 
         messages = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)[
             "messages"
         ]
         messages.sort(key=lambda m: m["ts"])
-
-        input = get_messages_for_slack_thread(
-            messages, self_id, lambda m: m.get("bot_id") == bot_id
-        )
-
-        print("Input: ", input)
 
         user = get_user_for_team_id(team_id, users.keys())
         if user is None:
@@ -169,12 +164,18 @@ def _asgi_app():
             return
         _, avatar_url = users[user]
 
+        input = get_messages_for_slack_thread(
+            messages, identity, user, lambda m: m.get("bot_id") == bot_id
+        )
+
+        print("Input: ", input)
+
         model = Inference()
 
         current_message = ""
         for chunk in model.generate.remote_gen(input, user=user, team_id=team_id):
             current_message += chunk
-            messages = current_message.split(f"{bot_id}: ")
+            messages = current_message.split("BOT: ")
             if len(messages) > 1:
                 # Send all complete messages except the last partial one
                 for message in messages[:-1]:
