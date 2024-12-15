@@ -8,7 +8,7 @@ from .common import (
     VOL_MOUNT_PATH,
     app,
     output_vol,
-    user_model_path,
+    get_user_checkpoint_path,
 )
 
 
@@ -41,6 +41,7 @@ class Inference:
             gpu_memory_utilization=0.95,
             tensor_parallel_size=1,
             enable_lora=True,
+            max_lora_rank=32,
             max_model_len=4096,
             # disable_custom_all_reduce=True,  # brittle as of v0.5.0
         )
@@ -50,8 +51,7 @@ class Inference:
     async def generate(
         self, input: list[dict], user: str, team_id: Optional[str] = None
     ) -> AsyncIterator[str]:
-        # FIXME
-        checkpoint_path = user_model_path(user, team_id) / "epoch_0"
+        checkpoint_path = get_user_checkpoint_path(user, team_id)
         lora_request = LoRARequest(f"{user}-{team_id}", 1, checkpoint_path)
 
         tokenizer = await self.engine.get_tokenizer(lora_request=lora_request)
@@ -89,7 +89,7 @@ class Inference:
 @app.local_entrypoint()
 def main(user: str):
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT.replace("{NAME}", "John Carmack")},
     ]
     inputs = [
         "Who are you?",

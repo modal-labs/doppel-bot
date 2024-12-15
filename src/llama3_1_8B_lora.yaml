@@ -4,12 +4,13 @@ dataset_path:
 
 # Model Arguments
 model:
-  _component_: torchtune.models.llama3_1.qlora_llama3_1_8b
+  _component_: torchtune.models.llama3_1.lora_llama3_1_8b
+  # _component_: torchtune.models.llama3_1.qlora_llama3_1_8b
   lora_attn_modules: ["q_proj", "v_proj", "output_proj"]
   apply_lora_to_mlp: True
   apply_lora_to_output: False
-  lora_rank: 16 # higher increases accuracy and memory
-  lora_alpha: 32 # usually alpha=2*rank
+  lora_rank: 32 # higher increases accuracy and memory
+  lora_alpha: 64 # usually alpha=2*rank
   lora_dropout: 0.0
 
 # Tokenizer
@@ -32,7 +33,7 @@ checkpointer:
   output_dir: ${output_dir}
   model_type: LLAMA3
 resume_from_checkpoint: False
-save_adapter_weights_only: False
+save_adapter_weights_only: True # Don't save the merged model
 
 # Dataset and Sampler
 dataset:
@@ -46,7 +47,7 @@ dataset:
   packed: False # True increases speed
 seed: null
 shuffle: True
-batch_size: 2
+batch_size: 4
 
 # Optimizer and Scheduler
 optimizer:
@@ -63,14 +64,15 @@ loss:
 
 # Training
 epochs: 2
-max_steps_per_epoch: null
-gradient_accumulation_steps: 8 # Use to increase effective batch size
+max_steps_per_epoch: 100 # Some workspaces have a small # of samples.
+gradient_accumulation_steps: 4 # Use to increase effective batch size
 compile: False # torch.compile the model + loss, True increases speed + decreases memory
 
 # Logging
 metric_logger:
-  _component_: torchtune.training.metric_logging.WandBLogger
-  project:
+  # Replaced with WandBLogger if WANDB_PROJECT is set
+  _component_: torchtune.training.metric_logging.DiskLogger
+  log_dir: ${output_dir}/logs
 log_every_n_steps: 5
 log_peak_memory_stats: True
 
