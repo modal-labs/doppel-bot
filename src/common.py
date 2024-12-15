@@ -13,7 +13,7 @@ VOL_MOUNT_PATH = Path("/vol")
 
 MULTI_WORKSPACE_SLACK_APP = False
 
-WANDB_PROJECT = "slack-finetune"
+WANDB_PROJECT = ""
 
 MODEL_PATH = VOL_MOUNT_PATH / "model"
 
@@ -21,8 +21,8 @@ app = modal.App(name="doppel-bot")
 
 slack_image = (
     modal.Image.debian_slim()
-    .pip_install("slack-sdk", "slack-bolt")
-    .pip_install("fastapi")
+    .pip_install("slack-sdk", "slack-bolt", "fastapi", "requests", "Pillow")
+    .add_local_file(Path(__file__).parent / "disguise.png", remote_path="/disguise.png")
     # .apt_install("wget")
     # .run_commands(
     #     "sh -c 'echo \"deb http://apt.postgresql.org/pub/repos/apt bullseye-pgdg main\" > /etc/apt/sources.list.d/pgdg.list'",
