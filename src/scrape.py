@@ -110,6 +110,10 @@ def get_conversations(
         )
 
         for message in result["messages"]:
+            if "user" not in message:
+                # Ignore threads from automations to avoid scrape taking too long.
+                continue
+
             if "reply_count" in message and message["reply_count"] > 0:
                 threads.append(message["ts"])
 
