@@ -1,4 +1,5 @@
 import subprocess
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -90,5 +91,5 @@ def finetune(user: str, team_id: Optional[str] = None):
         ]
     )
 
-    # # Delete scraped data after fine-tuning
-    # os.remove(data_path)
+    # Delete scraped data after fine-tuning
+    os.remove(data_path)
