@@ -1,6 +1,5 @@
 import os
 import time
-import re
 
 from fastapi import Request, FastAPI
 
@@ -11,6 +10,7 @@ from .common import (
     VOL_MOUNT_PATH,
     app,
     get_user_for_team_id,
+    get_messages_for_slack_thread,
     output_vol,
     slack_image,
 )
@@ -55,10 +55,11 @@ def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
 
 def get_self_id(team_id: str, client) -> str:
     try:
+        self_cache[team_id] = self_id = client.auth_test(team_id=team_id)
         # TODO: lower TTL when we support it.
         return self_cache[team_id]
     except KeyError:
-        self_cache[team_id] = self_id = client.auth_test(team_id=team_id)["user_id"]
+        self_cache[team_id] = self_id = client.auth_test(team_id=team_id)
         return self_id
 
 
@@ -88,6 +89,20 @@ def get_oauth_settings():
         state_store=FileOAuthStateStore(
             expiration_seconds=600, base_dir=VOL_MOUNT_PATH / "slack" / "state"
         ),
+    )
+
+
+def post_to_slack(text, client, channel_id, thread_ts, icon_url, username):
+    if text == "":
+        return
+
+    print(f"Sending message: {text}")
+    client.chat_postMessage(
+        channel=channel_id,
+        text=text,
+        thread_ts=thread_ts,
+        icon_url=icon_url,
+        username=username,
     )
 
 
@@ -135,28 +150,16 @@ def _asgi_app():
 
         users = get_users(team_id, client)
         self_id = get_self_id(team_id, client)
+        bot_id = self_id["bot_id"]
 
         messages = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)[
             "messages"
         ]
         messages.sort(key=lambda m: m["ts"])
 
-        # Go backwards and fetch messages until we hit the max input length.
-        inputs = []
-        total = 0
-        for message in reversed(messages):
-            if "user" in message:
-                i = f"{message['user']}: {message['text']}"
-            else:
-                i = message["text"]
-            i = i.replace(f"<@{self_id}>", "")
-            inputs.append(i)
-            total += len(i)
-
-            if total > MAX_INPUT_LENGTH:
-                break
-
-        input = "\n".join(reversed(inputs))
+        input = get_messages_for_slack_thread(
+            messages, self_id, lambda m: m.get("bot_id") == bot_id
+        )
 
         print("Input: ", input)
 
@@ -167,35 +170,24 @@ def _asgi_app():
         _, avatar_url = users[user]
 
         model = Inference()
-        exp = "|".join([f"{u}: " for u, _ in users.values()])
+
         current_message = ""
         for chunk in model.generate.remote_gen(input, user=user, team_id=team_id):
             current_message += chunk
-            messages = re.split(exp, current_message)
+            messages = current_message.split(f"{bot_id}: ")
             if len(messages) > 1:
                 # Send all complete messages except the last partial one
                 for message in messages[:-1]:
-                    if message:
-                        print(f"Sending message: {message}")
-                        client.chat_postMessage(
-                            channel=channel_id,
-                            text=message,
-                            thread_ts=ts,
-                            icon_url=avatar_url,
-                            username=f"{user}-bot",
-                        )
-                # Keep the last partial message
+                    post_to_slack(
+                        message, client, channel_id, ts, avatar_url, f"{user}-bot"
+                    )
+
                 current_message = messages[-1]
 
         # Send any remaining message
         if current_message:
-            print(f"Sending message: {current_message}")
-            client.chat_postMessage(
-                channel=channel_id,
-                text=current_message,
-                thread_ts=ts,
-                icon_url=avatar_url,
-                username=f"{user}-bot",
+            post_to_slack(
+                current_message, client, channel_id, ts, avatar_url, f"{user}-bot"
             )
 
     @slack_app.command("/doppel")

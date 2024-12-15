@@ -174,7 +174,7 @@ def scrape(
     user: str,
     team_id: Optional[str] = None,
     bot_token: Optional[str] = None,
-    min_message_length: int = 50,
+    min_message_length: int = 100,
     cutoff_days: int = 365,
 ):
     print(f"Beginning scrape for {user} in {team_id}...")
