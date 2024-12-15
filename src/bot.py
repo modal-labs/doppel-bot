@@ -1,7 +1,6 @@
 import os
 import time
-
-from fastapi import Request, FastAPI
+import uuid
 
 import modal
 
@@ -18,9 +17,15 @@ from .inference import Inference
 from .scrape import scrape
 from .finetune import finetune
 
+with slack_image.imports():
+    from fastapi import Request, FastAPI, Response
+    from .img_utils import overlay_disguise
+
+
 # Ephemeral caches
 users_cache = modal.Dict.from_name("doppel-bot-users-cache", create_if_missing=True)
 self_cache = modal.Dict.from_name("doppel-bot-self-cache", create_if_missing=True)
+avatar_cache = modal.Dict.from_name("doppel-bot-avatar-cache", create_if_missing=True)
 
 MAX_INPUT_LENGTH = 512  # characters, not tokens.
 
@@ -55,7 +60,6 @@ def get_users(team_id: str, client) -> dict[str, tuple[str, str]]:
 
 def get_identity(team_id: str, client) -> str:
     try:
-        self_cache[team_id] = self_id = client.auth_test(team_id=team_id)
         # TODO: lower TTL when we support it.
         return self_cache[team_id]
     except KeyError:
@@ -104,6 +108,20 @@ def post_to_slack(text, client, channel_id, thread_ts, icon_url, username):
         icon_url=icon_url,
         username=username,
     )
+
+
+def get_or_create_avatar_url(avatar_url: str, team_id: str, user: str) -> str:
+    key = f"{team_id}-{user}"
+
+    try:
+        img_id = avatar_cache[key]
+    except KeyError:
+        img_bytes = overlay_disguise(avatar_url)
+        img_id = str(uuid.uuid4())
+        avatar_cache[key] = img_id
+        avatar_cache[img_id] = img_bytes
+
+    return f"{_asgi_app.web_url}/avatar/{img_id}.png"
 
 
 @app.function(
@@ -172,7 +190,15 @@ def _asgi_app():
 
         model = Inference()
 
+        try:
+            disguised_avatar_url = get_or_create_avatar_url(avatar_url, team_id, user)
+            print("Created avatar URL: ", disguised_avatar_url)
+        except Exception as e:
+            print("Error creating disguised avatar URL: ", e)
+            disguised_avatar_url = avatar_url
+
         current_message = ""
+
         for chunk in model.generate.remote_gen(input, user=user, team_id=team_id):
             current_message += chunk
             messages = current_message.split("BOT: ")
@@ -180,7 +206,12 @@ def _asgi_app():
                 # Send all complete messages except the last partial one
                 for message in messages[:-1]:
                     post_to_slack(
-                        message, client, channel_id, ts, avatar_url, f"{user}-bot"
+                        message,
+                        client,
+                        channel_id,
+                        ts,
+                        disguised_avatar_url,
+                        f"{user}-bot",
                     )
 
                 current_message = messages[-1]
@@ -188,7 +219,12 @@ def _asgi_app():
         # Send any remaining message
         if current_message:
             post_to_slack(
-                current_message, client, channel_id, ts, avatar_url, f"{user}-bot"
+                current_message,
+                client,
+                channel_id,
+                ts,
+                disguised_avatar_url,
+                f"{user}-bot",
             )
 
     @slack_app.command("/doppel")
@@ -214,6 +250,10 @@ def _asgi_app():
     @fastapi_app.get("/slack/oauth_redirect")
     async def oauth_callback(request: Request):
         return await handler.handle(request)
+
+    @fastapi_app.get("/avatar/{img_id}.png")
+    async def avatar(img_id: str):
+        return Response(content=avatar_cache[img_id], media_type="image/png")
 
     return fastapi_app
 
