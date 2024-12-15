@@ -4,7 +4,7 @@
   <a href="https://modal-labs-doppel-env--doppel.modal.run/slack/install"><img alt="Add to Slack" height="40" width="139" src="https://platform.slack-edge.com/img/add_to_slack.png" srcSet="https://platform.slack-edge.com/img/add_to_slack.png 1x, https://platform.slack-edge.com/img/add_to_slack@2x.png 2x"  target="_blank" rel="noopener noreferrer" /></a>
 </p>
 
-DoppelBot is a Slack app that scrapes a target user's messages in Slack and fine-tunes a large language model (OpenLLaMa) to learn how to respond like them.
+DoppelBot is a Slack app that scrapes a target user's messages in Slack and fine-tunes a large language model (Llama 3.1) to learn how to respond like them.
 
 <p align="center">
 
@@ -18,6 +18,7 @@ All the components, including fine-tuning, inference and scraping are serverless
 [Read the docs](https://modal.com/docs/examples/slack-finetune).
 
 ## Usage
+
 - [Install the app](https://modal-labs-doppel-env--doppel.modal.run/slack/install)
 - In any channel, run `/doppel <user>`. Here, `<user>` is either the slack handle or real name of the user you want to target. _Note: for now, we limit each workspace to one target user, and this cannot be changed after installation._
 - Wait for the bot to finish training (few minutes to an hour, depending on how prolific your user is on Slack). You can run the command above again to check the status. _Note: Modal does not store any of your slack messages used for training; we only store training states_
@@ -44,9 +45,9 @@ This repo contains everything you need to run DoppelBot for yourself.
 
 ### Set up Modal
 
-- Create a [Modal](http://modal.com/) account. Note that we have a waitlist at the moment—[reach out](mailto:akshat@modal.com) if you would like to be taken off it sooner.
-- Install `modal-client` in your current Python virtual environment (`pip install modal-client`).
-- Set up a Modal token in your environment (`modal token new`).
+- Create a [Modal](http://modal.com/) account.
+- Install `modal-client` in your current Python virtual environment (`pip install modal`).
+- Set up a Modal token in your environment (`modal setup`).
 
 ### Create a Slack app
 
