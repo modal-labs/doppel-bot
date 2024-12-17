@@ -1,5 +1,4 @@
 import modal
-import random
 from typing import Literal, Optional, Callable
 from pathlib import Path
 
@@ -22,6 +21,8 @@ app = modal.App(name="doppel-bot")
 slack_image = (
     modal.Image.debian_slim()
     .pip_install("slack-sdk", "slack-bolt", "fastapi", "requests", "Pillow")
+    .apt_install("libpq-dev")
+    .pip_install("psycopg2")
     .add_local_file(Path(__file__).parent / "disguise.png", remote_path="/disguise.png")
 )
 
@@ -69,20 +70,42 @@ def find_latest_version(directory: Path) -> Path:
     return f"epoch_{largest}"
 
 
-def get_user_for_team_id(team_id: Optional[str], users: list[str]) -> Optional[str]:
-    # Dumb: for now, we only allow one user per team.
-    path = VOL_MOUNT_PATH / (team_id or "data")
-    filtered = []
-    for p in path.iterdir():
-        adapter_path = get_user_checkpoint_path(p.name, team_id) / "adapter_config.json"
-        if adapter_path.exists() and p.name in users:
-            filtered.append(p.name)
+def get_active_user_for_team_id(
+    team_id: Optional[str], users: list[str]
+) -> Optional[str]:
+    active_path = VOL_MOUNT_PATH / (team_id or "data") / "active.txt"
 
-    if not filtered:
+    output_vol.reload()
+
+    if not active_path.exists():
         return None
-    user = random.choice(filtered)
-    print(f"Randomly picked {user} out of {filtered}.")
-    return user
+
+    with open(active_path, "r") as f:
+        active = f.read().splitlines()
+        if not active:
+            return None
+
+        if active[0] in users:
+            return active[0]
+
+    return None
+
+
+def update_active_user(team_id: Optional[str], user: str) -> bool:
+    active_path = VOL_MOUNT_PATH / (team_id or "data") / "active.txt"
+
+    adapter_config_path = (
+        get_user_checkpoint_path(user, team_id) / "adapter_config.json"
+    )
+    if not adapter_config_path.exists():
+        return False
+
+    with open(active_path, "w") as f:
+        f.write(user)
+
+    output_vol.commit()
+
+    return True
 
 
 MAX_INPUT_LENGTH = 4096  # characters, not tokens.
