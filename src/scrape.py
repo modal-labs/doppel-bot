@@ -95,7 +95,7 @@ def get_user_id_map(bot_token: str) -> UserIdMap:
 @app.function(
     **scraper_kwargs,
     timeout=2 * HOURS,
-    concurrency_limit=4,  # Slack API applies rate limits
+    concurrency_limit=10,  # Slack API applies rate limits
 )
 def get_conversations(
     channel: Channel,
@@ -230,6 +230,8 @@ def scrape(
 
     with open(path, "w") as f:
         json.dump(conversations, f, indent=2)
+
+    output_vol.commit()
 
     samples = len(conversations)
     print(f"Finished scrape for {user} ({samples} samples found).")
