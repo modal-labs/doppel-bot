@@ -8,10 +8,12 @@ from .common import (
     MULTI_WORKSPACE_SLACK_APP,
     VOL_MOUNT_PATH,
     app,
-    get_user_for_team_id,
+    get_active_user_for_team_id,
     get_messages_for_slack_thread,
+    get_user_checkpoint_path,
     output_vol,
     slack_image,
+    update_active_user,
 )
 from .inference import Inference
 from .scrape import scrape
@@ -124,6 +126,47 @@ def get_or_create_avatar_url(avatar_url: str, team_id: str, user: str) -> str:
     return f"{_asgi_app.web_url}/avatar/{img_id}.png"
 
 
+def handle_train(team_id: str, user: str, client, respond):
+    from .db import insert_user, UserAlreadyExists, TooManyUsers
+
+    if MULTI_WORKSPACE_SLACK_APP:
+        try:
+            insert_user(team_id, user)
+        except UserAlreadyExists:
+            return respond(text=f"Team {team_id} already has {user} registered.")
+        except TooManyUsers:
+            return respond(text=f"Team {team_id} has too many users registered.")
+
+    user_pipeline.spawn(team_id, client.token, user, respond)
+
+
+def handle_list(team_id: str, users: list[str], respond):
+    from .db import list_users
+
+    active_user = get_active_user_for_team_id(team_id, users)
+    if MULTI_WORKSPACE_SLACK_APP:
+        users = list_users(team_id)
+    else:
+        path = VOL_MOUNT_PATH / (team_id or "data")
+        users = []
+
+        for p in path.iterdir():
+            adapter_path = (
+                get_user_checkpoint_path(p.name, team_id) / "adapter_config.json"
+            )
+            if adapter_path.exists():
+                users.append((p.name, "trained"))
+
+    msg = "\n".join(
+        f"{i}. {user} ({state}{', active' if user == active_user else ''})"
+        for i, (user, state) in enumerate(users, 1)
+    )
+
+    return respond(
+        text=msg if msg else "No users registered. Run /doppel train <user> first."
+    )
+
+
 @app.function(
     image=slack_image,
     secrets=[
@@ -146,8 +189,8 @@ def _asgi_app():
     else:
         # If we don't want to use multi-workspace auth, the client ID & secret interfere
         # with regular bot token auth.
-        del os.environ["SLACK_CLIENT_ID"]
-        del os.environ["SLACK_CLIENT_SECRET"]
+        os.environ.pop("SLACK_CLIENT_ID", None)
+        os.environ.pop("SLACK_CLIENT_SECRET", None)
         slack_app = App(
             signing_secret=os.environ["SLACK_SIGNING_SECRET"],
             token=os.environ["SLACK_BOT_TOKEN"],
@@ -176,26 +219,29 @@ def _asgi_app():
         ]
         messages.sort(key=lambda m: m["ts"])
 
-        user = get_user_for_team_id(team_id, users.keys())
+        user = get_active_user_for_team_id(team_id, users.keys())
         if user is None:
             say(text="No users trained yet. Run /doppel <user> first.", thread_ts=ts)
             return
-        _, avatar_url = users[user]
 
-        input = get_messages_for_slack_thread(
-            messages, identity, user, lambda m: m.get("bot_id") == bot_id
-        )
+        _, avatar_url = users[user]
+        username = f"{user}-bot"
+
+        def is_assistant(m):
+            return m.get("bot_id") == bot_id and m.get("username") == username
+
+        input = get_messages_for_slack_thread(messages, identity, user, is_assistant)
 
         print("Input: ", input)
 
         model = Inference()
 
         try:
-            disguised_avatar_url = get_or_create_avatar_url(avatar_url, team_id, user)
-            print("Created avatar URL: ", disguised_avatar_url)
+            avatar_url = get_or_create_avatar_url(avatar_url, team_id, user)
+            print("Created avatar URL: ", avatar_url)
         except Exception as e:
             print("Error creating disguised avatar URL: ", e)
-            disguised_avatar_url = avatar_url
+            avatar_url = avatar_url
 
         current_message = ""
 
@@ -205,39 +251,53 @@ def _asgi_app():
             if len(messages) > 1:
                 # Send all complete messages except the last partial one
                 for message in messages[:-1]:
-                    post_to_slack(
-                        message,
-                        client,
-                        channel_id,
-                        ts,
-                        disguised_avatar_url,
-                        f"{user}-bot",
-                    )
+                    post_to_slack(message, client, channel_id, ts, avatar_url, username)
 
                 current_message = messages[-1]
 
         # Send any remaining message
         if current_message:
-            post_to_slack(
-                current_message,
-                client,
-                channel_id,
-                ts,
-                disguised_avatar_url,
-                f"{user}-bot",
-            )
+            post_to_slack(current_message, client, channel_id, ts, avatar_url, username)
 
     @slack_app.command("/doppel")
     def handle_doppel(ack, respond, command, client):
         ack()
-        team_id = command["team_id"]
-        users = get_users(team_id, client)
+        users = get_users(command["team_id"], client)
+        team_id = command["team_id"] if MULTI_WORKSPACE_SLACK_APP else ""
 
-        user = command["text"]
-        if user not in users:
-            return respond(text=f"User {user} not found.")
+        cmds = command["text"].split(" ", maxsplit=1)
 
-        user_pipeline.spawn(team_id, client.token, user, respond)
+        output_vol.reload()
+
+        if cmds[0] == "train":
+            if len(cmds) < 2:
+                return respond(text="Usage: /doppel train <user>")
+            user = cmds[1]
+            if user not in users:
+                return respond(text=f"User {user} not found.")
+            handle_train(team_id, user, client, respond)
+        elif cmds[0] == "list":
+            return handle_list(team_id, users.keys(), respond)
+        elif cmds[0] == "switch":
+            if len(cmds) < 2:
+                return respond(text="Usage: /doppel switch <user>")
+            user = cmds[1]
+            if user not in users:
+                return respond(
+                    text=f"User {user} not found. Try /doppel list to see all trained users."
+                )
+            if not update_active_user(team_id, user):
+                return respond(
+                    text=f"User {user} not trained yet. Run /doppel train <user> first."
+                )
+            return respond(text=f"Switched to {user}.")
+        else:
+            return respond(
+                text="Usage:\n"
+                "/doppel train <user> - Train a bot to imitate a user\n"
+                "/doppel list - List all trained bots\n"
+                "/doppel switch <user> - Switch to chatting as a different bot"
+            )
 
     @fastapi_app.post("/")
     async def root(request: Request):
@@ -268,15 +328,9 @@ def _asgi_app():
     timeout=60 * 60 * 4,
 )
 def user_pipeline(team_id: str, token: str, user: str, respond):
-    from .db import insert_user, update_state, delete_user
+    from .db import update_state, delete_user
 
     try:
-        if MULTI_WORKSPACE_SLACK_APP:
-            state, handle = insert_user(team_id, user)
-            if handle is not None:
-                return respond(
-                    text=f"Team {team_id} already has {handle} registered (state={state})."
-                )
         respond(text=f"Began scraping {user}.")
         samples = scrape.remote(user, team_id, bot_token=token)
         respond(
@@ -293,9 +347,11 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
         respond(text=f"Finished training {user} after {time.time() - t0:.2f} seconds.")
 
         if MULTI_WORKSPACE_SLACK_APP:
-            update_state(team_id, user, "success")
+            update_state(team_id, user, "trained")
     except Exception as e:
-        respond(text=f"Failed to train {user} ({e}). Try again in a bit!")
+        respond(
+            text=f"Failed to train {user} ({e}). Try again in a bit, or reach out to support@modal.com!"
+        )
         if MULTI_WORKSPACE_SLACK_APP:
             delete_user(team_id, user)
         raise e
