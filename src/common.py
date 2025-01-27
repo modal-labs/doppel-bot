@@ -1,6 +1,6 @@
 import modal
 import random
-from typing import Optional, Callable
+from typing import Literal, Optional, Callable
 from pathlib import Path
 
 MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
@@ -13,7 +13,7 @@ VOL_MOUNT_PATH = Path("/vol")
 
 MULTI_WORKSPACE_SLACK_APP = False
 
-WANDB_PROJECT = ""
+WANDB_PROJECT = "doppel-bot"
 
 MODEL_PATH = VOL_MOUNT_PATH / "model"
 
@@ -23,13 +23,6 @@ slack_image = (
     modal.Image.debian_slim()
     .pip_install("slack-sdk", "slack-bolt", "fastapi", "requests", "Pillow")
     .add_local_file(Path(__file__).parent / "disguise.png", remote_path="/disguise.png")
-    # .apt_install("wget")
-    # .run_commands(
-    #     "sh -c 'echo \"deb http://apt.postgresql.org/pub/repos/apt bullseye-pgdg main\" > /etc/apt/sources.list.d/pgdg.list'",
-    #     "wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -",
-    # )
-    # .apt_install("libpq-dev")
-    # .pip_install("psycopg2")
 )
 
 output_vol = modal.Volume.from_name("doppelbot-vol", create_if_missing=True)
@@ -43,9 +36,34 @@ def get_user_model_path(user: str, team_id: Optional[str] = None) -> Path:
     return VOL_MOUNT_PATH / (team_id or "data") / user / "model"
 
 
-def get_user_checkpoint_path(user: str, team_id: Optional[str] = None) -> Path:
-    # TODO: do this better?
-    return get_user_model_path(user, team_id) / "epoch_1"
+def get_user_checkpoint_path(
+    user: str, team_id: Optional[str] = None, version: Optional[int] = None
+) -> Path:
+    user_model_path = get_user_model_path(user, team_id)
+    if version is None:
+        version = find_latest_version(user_model_path)
+    else:
+        version = f"epoch_{int(version)}"
+
+    return user_model_path / version
+
+
+def find_latest_version(directory: Path) -> Path:
+    import re
+
+    pattern = re.compile(r"^epoch_(\d+)$")
+
+    largest = -1
+
+    for entry in directory.iterdir():
+        if entry.is_dir():
+            match = pattern.match(entry.name)
+            if match:
+                value = int(match.group(1))  # Extract the integer suffix
+                if value > largest:
+                    largest = value
+
+    return f"epoch_{largest}"
 
 
 def get_user_for_team_id(team_id: Optional[str], users: list[str]) -> Optional[str]:
@@ -66,15 +84,18 @@ def get_user_for_team_id(team_id: Optional[str], users: list[str]) -> Optional[s
 
 MAX_INPUT_LENGTH = 4096  # characters, not tokens.
 
+Message = dict[str, str]  # OpenAI Message format -- role and content keys
+Conversation = dict[Literal["messages"] : list[Message]]
+
 
 def get_messages_for_slack_thread(
     thread: list[dict],
     identity: dict,
     target_user: str,
     is_assistant: Callable[[dict], bool],
-) -> list[dict]:
+) -> list[Message]:
     # Go backwards and fetch messages until we hit the max input length.
-    # Returns a conversation in the OpenAI chat dataset format.
+    # Returns a conversation in the OpenAI message format.
     messages = []
     total = 0
     bot_user_id = identity["user_id"]

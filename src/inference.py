@@ -24,13 +24,15 @@ with vllm_image.imports():
 
     from vllm.lora.request import LoRARequest
 
+MINUTES = 60  # seconds
+
 
 @app.cls(
     image=vllm_image,
-    gpu="H100",
-    container_idle_timeout=10 * 60,
-    timeout=5 * 60,
-    allow_concurrent_inputs=100,
+    gpu="L40S",
+    container_idle_timeout=10 * MINUTES,
+    timeout=5 * MINUTES,
+    allow_concurrent_inputs=50,  # depends on model size, GPU RAM, LoRA size and count
     volumes={VOL_MOUNT_PATH: output_vol},
 )
 class Inference:
@@ -41,23 +43,31 @@ class Inference:
             gpu_memory_utilization=0.95,
             tensor_parallel_size=1,
             enable_lora=True,
+            enforce_eager=True,
             max_lora_rank=32,
             max_model_len=4096,
-            # disable_custom_all_reduce=True,  # brittle as of v0.5.0
+            max_loras=16,
+            enable_prefix_caching=True,
         )
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+        self.loras: dict[str, int] = dict()  # per replica LoRA identifier
 
     @modal.method()
     async def generate(
-        self, input: list[dict], user: str, team_id: Optional[str] = None
+        self, inpt: list[dict], user: str, team_id: Optional[str] = None
     ) -> AsyncIterator[str]:
         checkpoint_path = get_user_checkpoint_path(user, team_id)
-        lora_request = LoRARequest(f"{user}-{team_id}", 1, checkpoint_path)
+        if (ident := f"{user}-{team_id}") not in self.loras:
+            self.loras[ident] = len(self.loras)
+        lora_request = LoRARequest(
+            ident, self.loras[ident], lora_local_path=checkpoint_path
+        )
+        print(lora_request)
 
         tokenizer = await self.engine.get_tokenizer(lora_request=lora_request)
 
         prompt = tokenizer.apply_chat_template(
-            conversation=input, tokenize=False, add_generation_prompt=True
+            conversation=inpt, tokenize=False, add_generation_prompt=True
         )
         sampling_params = SamplingParams(
             repetition_penalty=1.1,
@@ -88,9 +98,6 @@ class Inference:
 
 @app.local_entrypoint()
 def main(user: str):
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT.replace("{NAME}", "John Carmack")},
-    ]
     inputs = [
         "Who are you?",
         "What should we do next? Who should work on this?",
@@ -101,9 +108,12 @@ def main(user: str):
         "Summarize the conversation.",
     ]
     model = Inference()
-    for input in inputs:
-        print(input)
-        messages.append({"role": "user", "content": "U02ASG53F9S: " + input})
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT.replace("{NAME}", user)},
+    ]
+    for inpt in inputs:
+        print("💬:", inpt)
+        messages.append({"role": "user", "content": "U02ASG53F9S: " + inpt})
         output_text = ""
         for output in model.generate.remote_gen(messages, user=user):
             print(output, end="")

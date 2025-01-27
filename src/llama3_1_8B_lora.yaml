@@ -5,11 +5,10 @@ dataset_path:
 # Model Arguments
 model:
   _component_: torchtune.models.llama3_1.lora_llama3_1_8b
-  # _component_: torchtune.models.llama3_1.qlora_llama3_1_8b
   lora_attn_modules: ["q_proj", "v_proj", "output_proj"]
   apply_lora_to_mlp: True
   apply_lora_to_output: False
-  lora_rank: 32 # higher increases accuracy and memory
+  lora_rank: 32 # higher increases model capacity at cost of model size
   lora_alpha: 64 # usually alpha=2*rank
   lora_dropout: 0.0
 
@@ -43,11 +42,11 @@ dataset:
   conversation_style: openai
   data_files: ${dataset_path}
   split: train
-  train_on_input: True
-  packed: False # True increases speed
+  train_on_input: True  # also learn style of target Slack
+  packed: False # True increases speed, but has fussy tokenization
 seed: null
 shuffle: True
-batch_size: 4
+batch_size: 64
 
 # Optimizer and Scheduler
 optimizer:
@@ -63,17 +62,17 @@ loss:
   _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
 
 # Training
-epochs: 2
-max_steps_per_epoch: 100 # Some workspaces have a small # of samples.
-gradient_accumulation_steps: 4 # Use to increase effective batch size
-compile: False # torch.compile the model + loss, True increases speed + decreases memory
+epochs: 10
+max_steps_per_epoch:
+gradient_accumulation_steps: 1 # Use to increase effective batch size
+compile: False # torch.compile the model + loss, True increases speed + decreases memory, but compilation is slow
 
 # Logging
 metric_logger:
   # Replaced with WandBLogger if WANDB_PROJECT is set
   _component_: torchtune.training.metric_logging.DiskLogger
   log_dir: ${output_dir}/logs
-log_every_n_steps: 5
+log_every_n_steps: 10
 log_peak_memory_stats: True
 
 # Environment
@@ -81,8 +80,8 @@ device: cuda
 dtype: bf16
 
 # Activations Offloading
-enable_activation_checkpointing: True # True reduces memory
-enable_activation_offloading: False # True reduces memory
+enable_activation_checkpointing: True # True reduces memory at cost of compute
+enable_activation_offloading: False # True reduces memory at cost of latency to/from host
 
 # Profiler (disabled)
 profiler:

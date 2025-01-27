@@ -1,7 +1,6 @@
 import subprocess
 import os
 from pathlib import Path
-from typing import Optional
 
 import modal
 
@@ -15,6 +14,9 @@ from .common import (
     get_user_model_path,
     VOL_MOUNT_PATH,
 )
+
+MINUTES = 60  # seconds
+HOURS = 60 * MINUTES
 
 REMOTE_CONFIG_PATH = Path("/llama3_1_8B_lora.yaml")
 
@@ -45,7 +47,7 @@ def download_model():
     )
 
 
-secrets = [modal.Secret.from_name("huggingface-secret", environment_name="main")]
+secrets = [modal.Secret.from_name("huggingface-secret")]
 wandb_args = []
 
 if WANDB_PROJECT:
@@ -62,12 +64,23 @@ else:
     image=image,
     gpu="H100",
     volumes={VOL_MOUNT_PATH: output_vol},
-    timeout=60 * 60 * 2,
+    timeout=2 * HOURS,
     secrets=secrets,
 )
-def finetune(user: str, team_id: Optional[str] = None):
+def finetune(
+    user: str, team_id: str = None, recipe_args: str = None, cleanup: bool = True
+):
+    """Fine-tune a model on the user from the provided team with torchtune.
+
+    Args:
+        user: The real or display username of a Slack user.
+        team_id: Identifier for a Slack workspace.
+        recipe_args: Additional arguments to pass to the fine-tuning recipe.
+        cleanup: Remove user data after fine-tuning. On by default.
+    """
+    import shlex
+
     if not MODEL_PATH.exists():
-        # More robust way to check if it's downloaded.
         print("Downloading model...")
         download_model()
         output_vol.commit()
@@ -76,6 +89,11 @@ def finetune(user: str, team_id: Optional[str] = None):
 
     output_dir = get_user_model_path(user, team_id)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if recipe_args is not None:
+        recipe_args = shlex.split(recipe_args)
+    else:
+        recipe_args = []
 
     subprocess.run(
         [
@@ -89,7 +107,9 @@ def finetune(user: str, team_id: Optional[str] = None):
             f"model_path={MODEL_PATH.as_posix()}",
             *wandb_args,
         ]
+        + recipe_args
     )
 
-    # Delete scraped data after fine-tuning
-    os.remove(data_path)
+    if cleanup and user != "test":
+        # Delete scraped data after fine-tuning
+        os.remove(data_path)
