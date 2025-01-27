@@ -55,6 +55,9 @@ def find_latest_version(directory: Path) -> Path:
 
     largest = -1
 
+    if not directory.exists():
+        return ""
+
     for entry in directory.iterdir():
         if entry.is_dir():
             match = pattern.match(entry.name)
