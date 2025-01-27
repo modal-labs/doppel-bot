@@ -1,5 +1,5 @@
 """
-This modules is only used when MULTI_WORKSPACE_SLACK_APP=True.
+This module is only used when MULTI_WORKSPACE_SLACK_APP=True.
 """
 from typing import Optional
 import modal

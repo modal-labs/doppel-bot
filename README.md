@@ -7,7 +7,6 @@
 DoppelBot is a Slack app that scrapes a target user's messages in Slack and fine-tunes a large language model (Llama 3.1) to learn how to respond like them.
 
 <p align="center">
-
   <img width="489" alt="doppel-bot in action" src="https://github.com/modal-labs/doppel-bot/assets/5786378/4075e372-3a84-4dd3-9ed2-8beaeb18e0d2">
 </p>
 
@@ -46,7 +45,7 @@ This repo contains everything you need to run DoppelBot for yourself.
 ### Set up Modal
 
 - Create a [Modal](http://modal.com/) account.
-- Install `modal-client` in your current Python virtual environment (`pip install modal`).
+- Install the `modal` client in your current Python environment (`pip install modal`).
 - Set up a Modal token in your environment (`modal setup`).
 
 ### Create a Slack app
@@ -78,7 +77,7 @@ This repo contains everything you need to run DoppelBot for yourself.
 
 ### (Optional) Set up Weights & Biases
 
-To track your fine-tuning runs on [Weights & Biases](https://wandb.ai), you'll need to create a Weights & Biases account, and then [create a Modal secret](https://modal.com/secrets/create) with the credentials (click on **Weights & Biases** in the secrets wizard and follow the steps). Then, set [`WANDB_PROJECT`](https://github.com/modal-labs/doppel-bot/blob/aae3f8675e9052251690997557aa8d4a9ae447e6/src/common.py#L10) in `src/common.py` to the name of the project you want to use.
+To track your fine-tuning runs on [Weights & Biases](https://wandb.ai), you'll need to create a Weights & Biases account, and then [create a Modal secret](https://modal.com/secrets/create) with the credentials (select **Weights & Biases** from the secrets templates and follow the instructions). Then, set `WANDB_PROJECT` in `src/common.py` to the name of the project you want to use.
 
 ### Deploy your app
 

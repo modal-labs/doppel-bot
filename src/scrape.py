@@ -7,6 +7,7 @@ from typing import Iterable
 
 from .common import (
     app,
+    Conversation,
     VOL_MOUNT_PATH,
     output_vol,
     get_user_data_path,
@@ -20,6 +21,9 @@ scraper_kwargs = dict(
 
 # Cache for slack threads.
 slack_cache = modal.Dict.from_name("slack-conversation-dict", create_if_missing=True)
+
+MINUTES = 60  # seconds
+HOURS = 60 * MINUTES
 
 
 def make_slack_client(bot_token: str):
@@ -47,8 +51,13 @@ def get_thread_replies_cached(client, ts: str, channel_id: str):
     return messages
 
 
+ChannelId = str
+ChannelName = str
+Channel = tuple[ChannelId, ChannelName]
+
+
 @app.function(**scraper_kwargs)
-def get_channels(bot_token: str) -> Iterable[tuple[str, str]]:
+def get_channels(bot_token: str) -> Iterable[Channel]:
     client = make_slack_client(bot_token)
     result = client.conversations_list(limit=1000)
     channels = result["channels"]
@@ -57,9 +66,13 @@ def get_channels(bot_token: str) -> Iterable[tuple[str, str]]:
             yield c["id"], c["name"]
 
 
+UserDisplayName = UserRealName = str
+UserIdMap = dict[str, tuple[UserDisplayName, UserRealName]]
+
+
 @app.function(**scraper_kwargs)
-def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
-    """Map of user id to (display name, real name)."""
+def get_user_id_map(bot_token: str) -> UserIdMap:
+    """Produce a dictionary mapping user id to (display name, real name)."""
     client = make_slack_client(bot_token)
     cursor = None
     user_id_map = {}
@@ -81,18 +94,29 @@ def get_user_id_map(bot_token: str) -> dict[str, tuple[str, str]]:
 
 @app.function(
     **scraper_kwargs,
-    timeout=3000,
-    concurrency_limit=4,
+    timeout=2 * HOURS,
+    concurrency_limit=4,  # Slack API applies rate limits
 )
 def get_conversations(
-    channel: tuple[str, str],
-    names: dict[str, tuple[str, str]],
-    target_user: str,
+    channel: Channel,
+    names: UserIdMap,
+    target_user: UserDisplayName | UserRealName,
     min_message_length: int,
     cutoff_days: int,
     bot_token: str,
-    team_id: str,
-) -> list[tuple[str, str]]:
+    team_id: Optional[str],
+) -> list[Conversation]:
+    """Fetch conversations via the Slack API for a given target_user in a given channel.
+
+    Args:
+        channel: A channel to scrape, provided in the format `(id, name)`
+        names: A dictionary mapping user IDs to user display and real names.
+        target_user: The display or real username to fetch conversations for.
+        min_message_length: Minimum length of message by target user to include in scrape.
+        cutoff_days: Number of days in the past to fetch conversations from.
+        bot_token: Slack bot token for authentication.
+        team_id: The workspace to scrape.
+    """
     channel_id, channel_name = channel
 
     client = make_slack_client(bot_token)
@@ -150,12 +174,7 @@ def get_conversations(
                 conversation = get_messages_for_slack_thread(
                     messages_so_far, identity, target_user, is_target
                 )
-                # print(json.dumps(conversation, indent=2))
-                conversations.append(
-                    {
-                        "messages": conversation,
-                    }
-                )
+                conversations.append({"messages": conversation})
 
     return conversations
 
@@ -167,17 +186,24 @@ def get_conversations(
         initial_delay=5.0,
         backoff_coefficient=2.0,
     ),
-    timeout=60 * 60 * 2,
+    timeout=3 * HOURS,
     volumes={VOL_MOUNT_PATH: output_vol},
 )
 def scrape(
-    user: str,
+    user: UserDisplayName | UserRealName,
     team_id: Optional[str] = None,
     bot_token: Optional[str] = None,
     min_message_length: int = 100,
     cutoff_days: int = 365,
 ):
-    print(f"Beginning scrape for {user} in {team_id}...")
+    """Scrapes the Slack API for a target user's conversations and saves them in OpenAI Chat format.
+
+    Args:
+        user (str): The display or real Slack username to target with the scrape.
+
+    Other arguments are passed to get_conversations. See that function's docstring for details.
+    """
+    print(f"Beginning scrape for {user}...")
     bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
     conversations = []
     channels = list(get_channels.remote_gen(bot_token))
@@ -199,12 +225,12 @@ def scrape(
     path = get_user_data_path(user, team_id)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Limit to 30,000 samples.
-    conversations = conversations[:30_000]
+    # Limit to (most recent) 30,000 samples.
+    conversations = conversations[-30_000:]
 
     with open(path, "w") as f:
         json.dump(conversations, f, indent=2)
 
     samples = len(conversations)
-    print(f"Finished scrape for {user} in {team_id} ({samples} samples found).")
+    print(f"Finished scrape for {user} ({samples} samples found).")
     return samples
