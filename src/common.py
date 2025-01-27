@@ -13,7 +13,7 @@ VOL_MOUNT_PATH = Path("/vol")
 
 MULTI_WORKSPACE_SLACK_APP = False
 
-WANDB_PROJECT = "doppel-bot"
+WANDB_PROJECT = ""
 
 MODEL_PATH = VOL_MOUNT_PATH / "model"
 
