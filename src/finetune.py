@@ -62,7 +62,7 @@ else:
 
 @app.function(
     image=image,
-    gpu="H100",
+    gpu="H100:2",
     volumes={VOL_MOUNT_PATH: output_vol},
     timeout=2 * HOURS,
     secrets=secrets,
@@ -99,7 +99,11 @@ def finetune(
         [
             "tune",
             "run",
-            "lora_finetune_single_device",
+            "--nnodes",
+            "1",
+            "--nproc_per_node",
+            "2",
+            "lora_finetune_distributed",
             "--config",
             REMOTE_CONFIG_PATH,
             f"output_dir={output_dir.as_posix()}",
@@ -107,9 +111,10 @@ def finetune(
             f"model_path={MODEL_PATH.as_posix()}",
             *wandb_args,
         ]
-        + recipe_args
+        + recipe_args,
+        check=True,
     )
 
-    if cleanup and user != "test":
+    if cleanup and user != "charles":
         # Delete scraped data after fine-tuning
         os.remove(data_path)
