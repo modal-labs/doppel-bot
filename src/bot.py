@@ -148,6 +148,8 @@ def handle_list(team_id: str, users: list[str], respond):
         users = list_users(team_id)
     else:
         path = VOL_MOUNT_PATH / (team_id or "data")
+        path.mkdir(parents=True, exist_ok=True)
+
         users = []
 
         for p in path.iterdir():

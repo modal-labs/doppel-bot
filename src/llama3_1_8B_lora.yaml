@@ -42,7 +42,7 @@ dataset:
   conversation_style: openai
   data_files: ${dataset_path}
   split: train
-  train_on_input: True  # also learn style of target Slack
+  train_on_input: True # also learn style of target Slack
   packed: False # True increases speed, but has fussy tokenization
 seed: null
 shuffle: True
@@ -62,8 +62,8 @@ loss:
   _component_: torchtune.modules.loss.CEWithChunkedOutputLoss
 
 # Training
-epochs: 10
-max_steps_per_epoch:
+epochs: 2
+max_steps_per_epoch: 200 # Some workspaces have a small # of samples.
 gradient_accumulation_steps: 1 # Use to increase effective batch size
 compile: False # torch.compile the model + loss, True increases speed + decreases memory, but compilation is slow
 

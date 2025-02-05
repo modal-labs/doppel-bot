@@ -225,8 +225,8 @@ def scrape(
     path = get_user_data_path(user, team_id)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Limit to (most recent) 30,000 samples.
-    conversations = conversations[-30_000:]
+    # Limit to (most recent) 1,000 samples.
+    conversations = conversations[-1_000:]
 
     with open(path, "w") as f:
         json.dump(conversations, f, indent=2)
