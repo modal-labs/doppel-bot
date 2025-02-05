@@ -262,8 +262,8 @@ def _asgi_app():
     @slack_app.command("/doppel")
     def handle_doppel(ack, respond, command, client):
         ack()
-        users = get_users(command["team_id"], client)
-        team_id = command["team_id"] if MULTI_WORKSPACE_SLACK_APP else ""
+        team_id = command["team_id"]
+        users = get_users(team_id, client)
 
         cmds = command["text"].split(" ", maxsplit=1)
 

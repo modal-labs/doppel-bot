@@ -3,7 +3,6 @@ import modal
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 import os
-from typing import Iterable
 
 from .common import (
     app,
@@ -14,10 +13,7 @@ from .common import (
     get_messages_for_slack_thread,
 )
 
-scraper_kwargs = dict(
-    image=modal.Image.debian_slim().pip_install("slack-sdk"),
-    secrets=[modal.Secret.from_name("slack-finetune-secret")],
-)
+slack_image = modal.Image.debian_slim().pip_install("slack-sdk")
 
 # Cache for slack threads.
 slack_cache = modal.Dict.from_name("slack-conversation-dict", create_if_missing=True)
@@ -25,11 +21,12 @@ slack_cache = modal.Dict.from_name("slack-conversation-dict", create_if_missing=
 MINUTES = 60  # seconds
 HOURS = 60 * MINUTES
 
-
-def make_slack_client(bot_token: str):
+with slack_image.imports():
     from slack_sdk import WebClient
     from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 
+
+def make_slack_client(bot_token: str) -> "WebClient":
     class CustomRetryHandler(RateLimitErrorRetryHandler):
         def prepare_for_next_attempt(self, **kwargs):
             super().prepare_for_next_attempt(**kwargs)
@@ -56,24 +53,22 @@ ChannelName = str
 Channel = tuple[ChannelId, ChannelName]
 
 
-@app.function(**scraper_kwargs)
-def get_channels(bot_token: str) -> Iterable[Channel]:
-    client = make_slack_client(bot_token)
+def get_channels(client: "WebClient") -> list[Channel]:
     result = client.conversations_list(limit=1000)
     channels = result["channels"]
-    for c in channels:
-        if not c["is_shared"] and not c["is_archived"]:
-            yield c["id"], c["name"]
+    return [
+        (c["id"], c["name"])
+        for c in channels
+        if not c["is_shared"] and not c["is_archived"]
+    ]
 
 
 UserDisplayName = UserRealName = str
 UserIdMap = dict[str, tuple[UserDisplayName, UserRealName]]
 
 
-@app.function(**scraper_kwargs)
-def get_user_id_map(bot_token: str) -> UserIdMap:
+def get_user_id_map(client: "WebClient") -> UserIdMap:
     """Produce a dictionary mapping user id to (display name, real name)."""
-    client = make_slack_client(bot_token)
     cursor = None
     user_id_map = {}
     while True:
@@ -93,7 +88,8 @@ def get_user_id_map(bot_token: str) -> UserIdMap:
 
 
 @app.function(
-    **scraper_kwargs,
+    image=slack_image,
+    secrets=[modal.Secret.from_name("slack-finetune-secret")],
     timeout=2 * HOURS,
     concurrency_limit=10,  # Slack API applies rate limits
 )
@@ -180,7 +176,8 @@ def get_conversations(
 
 
 @app.function(
-    **scraper_kwargs,
+    image=slack_image,
+    secrets=[modal.Secret.from_name("slack-finetune-secret")],
     retries=modal.Retries(
         max_retries=3,
         initial_delay=5.0,
@@ -204,10 +201,13 @@ def scrape(
     Other arguments are passed to get_conversations. See that function's docstring for details.
     """
     print(f"Beginning scrape for {user}...")
+
     bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
+    client = make_slack_client(bot_token)
+
     conversations = []
-    channels = list(get_channels.remote_gen(bot_token))
-    users = get_user_id_map.remote(bot_token)
+    channels = get_channels(client)
+    users = get_user_id_map(client)
 
     for c in get_conversations.map(
         channels,
