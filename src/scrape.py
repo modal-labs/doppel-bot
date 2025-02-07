@@ -3,6 +3,7 @@ import modal
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 import os
+import time
 
 from .common import (
     app,
@@ -23,6 +24,7 @@ HOURS = 60 * MINUTES
 
 with slack_image.imports():
     from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
     from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 
 
@@ -30,10 +32,16 @@ def make_slack_client(bot_token: str) -> "WebClient":
     class CustomRetryHandler(RateLimitErrorRetryHandler):
         def prepare_for_next_attempt(self, **kwargs):
             super().prepare_for_next_attempt(**kwargs)
-            print("Retrying...", kwargs["request"].url, kwargs["state"].current_attempt)
+            time.sleep(1 * kwargs["state"].current_attempt)
+            print(
+                "Retrying...",
+                kwargs["request"].body_params,
+                kwargs["request"].url,
+                kwargs["state"].current_attempt,
+            )
 
     client = WebClient(token=bot_token)
-    client.retry_handlers.append(CustomRetryHandler(max_retry_count=8))
+    client.retry_handlers.append(CustomRetryHandler(max_retry_count=5))
 
     return client
 
@@ -159,7 +167,13 @@ def get_conversations(
         return (display_name == target_user) or (real_name == target_user)
 
     for ts in threads:
-        messages = get_thread_replies_cached(client, ts, channel_id)
+        try:
+            messages = get_thread_replies_cached(client, ts, channel_id)
+        except SlackApiError as e:
+            if "ratelimited" in str(e).lower():
+                print("Hit rate limit, returning early")
+                break
+            raise e
         messages.sort(key=lambda m: m["ts"])
 
         messages_so_far = []

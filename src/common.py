@@ -12,7 +12,7 @@ VOL_MOUNT_PATH = Path("/vol")
 
 MULTI_WORKSPACE_SLACK_APP = False
 
-WANDB_PROJECT = ""
+WANDB_PROJECT = "slack-finetune"
 
 MODEL_PATH = VOL_MOUNT_PATH / "model"
 
