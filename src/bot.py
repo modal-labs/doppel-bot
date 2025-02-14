@@ -147,7 +147,7 @@ def handle_list(team_id: str, users: list[str], respond):
     if MULTI_WORKSPACE_SLACK_APP:
         users = list_users(team_id)
     else:
-        path = VOL_MOUNT_PATH / (team_id or "data")
+        path = VOL_MOUNT_PATH / team_id
         path.mkdir(parents=True, exist_ok=True)
 
         users = []
@@ -208,7 +208,7 @@ def _asgi_app():
 
     @slack_app.event("app_mention")
     def handle_app_mentions(body, say, client):
-        team_id = body["team_id"] if MULTI_WORKSPACE_SLACK_APP else ""
+        team_id = body["team_id"]
         channel_id = body["event"]["channel"]
         ts = body["event"].get("thread_ts", body["event"]["ts"])
 

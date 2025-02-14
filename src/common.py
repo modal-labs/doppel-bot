@@ -70,10 +70,8 @@ def find_latest_version(directory: Path) -> Path:
     return f"epoch_{largest}"
 
 
-def get_active_user_for_team_id(
-    team_id: Optional[str], users: list[str]
-) -> Optional[str]:
-    active_path = VOL_MOUNT_PATH / (team_id or "data") / "active.txt"
+def get_active_user_for_team_id(team_id: str, users: list[str]) -> Optional[str]:
+    active_path = VOL_MOUNT_PATH / team_id / "active.txt"
 
     output_vol.reload()
 
@@ -91,8 +89,9 @@ def get_active_user_for_team_id(
     return None
 
 
-def update_active_user(team_id: Optional[str], user: str) -> bool:
-    active_path = VOL_MOUNT_PATH / (team_id or "data") / "active.txt"
+def update_active_user(team_id: str, user: str) -> bool:
+    active_path = VOL_MOUNT_PATH / team_id / "active.txt"
+    print("UPDATING", active_path)
 
     adapter_config_path = (
         get_user_checkpoint_path(user, team_id) / "adapter_config.json"
