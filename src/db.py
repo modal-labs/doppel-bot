@@ -1,7 +1,9 @@
 """
 This module is only used when MULTI_WORKSPACE_SLACK_APP=True.
 """
+
 import modal
+
 from .common import app, slack_image
 
 with slack_image.imports():
@@ -23,7 +25,7 @@ def insert_user(team_id: str, user: str):
 
     with psycopg2.connect() as conn:
         cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM users WHERE team_id = '{team_id}'")
+        cur.execute("SELECT COUNT(*) FROM users WHERE team_id = %s", [team_id])
         count = cur.fetchone()[0]
 
         if count >= MAX_USERS_PER_TEAM:
@@ -42,24 +44,22 @@ def insert_user(team_id: str, user: str):
 def list_users(team_id: str) -> list[tuple[str, str]]:
     with psycopg2.connect() as conn:
         cur = conn.cursor()
-        cur.execute(f"SELECT handle, state FROM users WHERE team_id = '{team_id}'")
+        cur.execute("SELECT handle, state FROM users WHERE team_id = %s", [team_id])
         return [(handle, state) for handle, state in cur.fetchall()]
 
 
 def update_state(team_id: str, user: str, state: str):
     with psycopg2.connect() as conn:
         cur = conn.cursor()
-        query = "UPDATE users SET state = %s"
-        params = [state]
 
         if state == "training":
-            query += ", scraped_at = CURRENT_TIMESTAMP"
+            query = "UPDATE users SET state = %s, scraped_at = CURRENT_TIMESTAMP WHERE team_id = %s AND handle = %s"
         elif state == "trained":
-            query += ", trained_at = CURRENT_TIMESTAMP"
+            query = "UPDATE users SET state = %s, trained_at = CURRENT_TIMESTAMP WHERE team_id = %s AND handle = %s"
+        else:
+            query = "UPDATE users SET state = %s WHERE team_id = %s AND handle = %s"
 
-        query += " WHERE team_id = %s AND handle = %s"
-        params.extend([team_id, user])
-
+        params = [state, team_id, user]
         cur.execute(query, params)
         conn.commit()
 
@@ -67,9 +67,7 @@ def update_state(team_id: str, user: str, state: str):
 def delete_user(team_id: str, user: str):
     with psycopg2.connect() as conn:
         cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM users WHERE team_id = %s AND handle = %s", [team_id, user]
-        )
+        cur.execute("DELETE FROM users WHERE team_id = %s AND handle = %s", [team_id, user])
         conn.commit()
 
 

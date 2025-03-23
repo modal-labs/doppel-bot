@@ -1,17 +1,18 @@
 import json
-import modal
-from typing import Optional
-from datetime import datetime, timedelta, timezone
 import os
 import time
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+import modal
 
 from .common import (
-    app,
-    Conversation,
     VOL_MOUNT_PATH,
-    output_vol,
-    get_user_data_path,
+    Conversation,
+    app,
     get_messages_for_slack_thread,
+    get_user_data_path,
+    output_vol,
 )
 
 slack_image = modal.Image.debian_slim().pip_install("slack-sdk")
@@ -64,11 +65,7 @@ Channel = tuple[ChannelId, ChannelName]
 def get_channels(client: "WebClient") -> list[Channel]:
     result = client.conversations_list(limit=1000)
     channels = result["channels"]
-    return [
-        (c["id"], c["name"])
-        for c in channels
-        if not c["is_shared"] and not c["is_archived"]
-    ]
+    return [(c["id"], c["name"]) for c in channels if not c["is_shared"] and not c["is_archived"]]
 
 
 UserDisplayName = UserRealName = str
@@ -133,9 +130,7 @@ def get_conversations(
     cursor = None
     threads: list[str] = []
     while True:
-        result = client.conversations_history(
-            channel=channel_id, oldest=cutoff, cursor=cursor, limit=1000
-        )
+        result = client.conversations_history(channel=channel_id, oldest=cutoff, cursor=cursor, limit=1000)
 
         for message in result["messages"]:
             if "bot_id" in message:
@@ -181,9 +176,7 @@ def get_conversations(
             messages_so_far.append(message)
 
             if is_target(message) and len(message["text"]) > min_message_length:
-                conversation = get_messages_for_slack_thread(
-                    messages_so_far, identity, target_user, is_target
-                )
+                conversation = get_messages_for_slack_thread(messages_so_far, identity, target_user, is_target)
                 conversations.append({"messages": conversation})
 
     return conversations

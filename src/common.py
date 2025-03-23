@@ -1,17 +1,19 @@
-import modal
-import os
-from typing import Literal, Optional, Callable
 from pathlib import Path
+from typing import Callable, Literal, Optional
+
+import modal
 
 MODEL_NAME = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
-SYSTEM_PROMPT = """You are {NAME}, an employee at a fast-growing startup. Below is an input conversation that takes place in the company's internal Slack. Continue the conversation appropriately in the same tone and style.
+SYSTEM_PROMPT = """You are {NAME}, an employee at a fast-growing startup. \
+Below is an input conversation that takes place in the company's internal Slack. \
+Continue the conversation appropriately in the same tone and style.
 
 <@BOT> is your handle."""
 
 VOL_MOUNT_PATH = Path("/vol")
 
-MULTI_WORKSPACE_SLACK_APP = os.environ.get("MULTI_WORKSPACE_SLACK_APP") == "1"
+MULTI_WORKSPACE_SLACK_APP = True
 
 WANDB_PROJECT = "slack-finetune"
 
@@ -38,9 +40,7 @@ def get_user_model_path(user: str, team_id: Optional[str] = None) -> Path:
     return VOL_MOUNT_PATH / (team_id or "data") / user / "model"
 
 
-def get_user_checkpoint_path(
-    user: str, team_id: Optional[str] = None, version: Optional[int] = None
-) -> Path:
+def get_user_checkpoint_path(user: str, team_id: Optional[str] = None, version: Optional[int] = None) -> Path:
     user_model_path = get_user_model_path(user, team_id)
     if version is None:
         version = find_latest_version(user_model_path)
@@ -94,9 +94,7 @@ def update_active_user(team_id: str, user: str) -> bool:
     active_path = VOL_MOUNT_PATH / team_id / "active.txt"
     print("UPDATING", active_path)
 
-    adapter_config_path = (
-        get_user_checkpoint_path(user, team_id) / "adapter_config.json"
-    )
+    adapter_config_path = get_user_checkpoint_path(user, team_id) / "adapter_config.json"
     if not adapter_config_path.exists():
         return False
 
@@ -149,9 +147,7 @@ def get_messages_for_slack_thread(
             current_message.append(text)
         else:
             if current_message:
-                messages.append(
-                    dict(role=last_turn, content="\n".join(reversed(current_message)))
-                )
+                messages.append(dict(role=last_turn, content="\n".join(reversed(current_message))))
             current_message = [text]
             last_turn = role
 
@@ -161,14 +157,10 @@ def get_messages_for_slack_thread(
             break
 
     if current_message:
-        messages.append(
-            dict(role=last_turn, content="\n".join(reversed(current_message)))
-        )
+        messages.append(dict(role=last_turn, content="\n".join(reversed(current_message))))
 
     if last_turn == "assistant":
         # Special case because Llama doesn't like assistant messages right after system.
         messages.append(dict(role="user", content="\n"))
 
-    return [
-        dict(role="system", content=SYSTEM_PROMPT.replace("{NAME}", target_user))
-    ] + list(reversed(messages))
+    return [dict(role="system", content=SYSTEM_PROMPT.replace("{NAME}", target_user))] + list(reversed(messages))

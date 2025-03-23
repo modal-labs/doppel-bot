@@ -1,5 +1,5 @@
-import subprocess
 import os
+import subprocess
 from pathlib import Path
 
 import modal
@@ -7,12 +7,12 @@ import modal
 from .common import (
     MODEL_NAME,
     MODEL_PATH,
+    VOL_MOUNT_PATH,
     WANDB_PROJECT,
     app,
-    output_vol,
     get_user_data_path,
     get_user_model_path,
-    VOL_MOUNT_PATH,
+    output_vol,
 )
 
 MINUTES = 60  # seconds
@@ -24,12 +24,8 @@ image = (
     modal.Image.debian_slim()
     .pip_install("wandb", "torch", "torchao", "torchvision")
     .apt_install("git")
-    .pip_install(
-        "git+https://github.com/pytorch/torchtune.git@06a837953a89cdb805c7538ff5e0cc86c7ab44d9"
-    )
-    .add_local_file(
-        Path(__file__).parent / "llama3_1_8B_lora.yaml", REMOTE_CONFIG_PATH.as_posix()
-    )
+    .pip_install("git+https://github.com/pytorch/torchtune.git@06a837953a89cdb805c7538ff5e0cc86c7ab44d9")
+    .add_local_file(Path(__file__).parent / "llama3_1_8B_lora.yaml", REMOTE_CONFIG_PATH.as_posix())
 )
 
 
@@ -67,9 +63,7 @@ else:
     timeout=2 * HOURS,
     secrets=secrets,
 )
-def finetune(
-    user: str, team_id: str = None, recipe_args: str = None, cleanup: bool = True
-):
+def finetune(user: str, team_id: str = None, recipe_args: str = None, cleanup: bool = True):
     """Fine-tune a model on the user from the provided team with torchtune.
 
     Args:

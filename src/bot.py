@@ -15,12 +15,13 @@ from .common import (
     slack_image,
     update_active_user,
 )
+from .finetune import finetune
 from .inference import Inference
 from .scrape import scrape
-from .finetune import finetune
 
 with slack_image.imports():
-    from fastapi import Request, FastAPI, Response
+    from fastapi import FastAPI, Request, Response
+
     from .img_utils import overlay_disguise
 
 
@@ -89,12 +90,8 @@ def get_oauth_settings():
             "users:read",
         ],
         install_page_rendering_enabled=False,
-        installation_store=FileInstallationStore(
-            base_dir=VOL_MOUNT_PATH / "slack" / "installation"
-        ),
-        state_store=FileOAuthStateStore(
-            expiration_seconds=600, base_dir=VOL_MOUNT_PATH / "slack" / "state"
-        ),
+        installation_store=FileInstallationStore(base_dir=VOL_MOUNT_PATH / "slack" / "installation"),
+        state_store=FileOAuthStateStore(expiration_seconds=600, base_dir=VOL_MOUNT_PATH / "slack" / "state"),
     )
 
 
@@ -127,7 +124,7 @@ def get_or_create_avatar_url(avatar_url: str, team_id: str, user: str) -> str:
 
 
 def handle_train(team_id: str, user: str, client, respond):
-    from .db import insert_user, UserAlreadyExists, TooManyUsers
+    from .db import TooManyUsers, UserAlreadyExists, insert_user
 
     if MULTI_WORKSPACE_SLACK_APP:
         try:
@@ -153,20 +150,15 @@ def handle_list(team_id: str, users: list[str], respond):
         users = []
 
         for p in path.iterdir():
-            adapter_path = (
-                get_user_checkpoint_path(p.name, team_id) / "adapter_config.json"
-            )
+            adapter_path = get_user_checkpoint_path(p.name, team_id) / "adapter_config.json"
             if adapter_path.exists():
                 users.append((p.name, "trained"))
 
     msg = "\n".join(
-        f"{i}. {user} ({state}{', active' if user == active_user else ''})"
-        for i, (user, state) in enumerate(users, 1)
+        f"{i}. {user} ({state}{', active' if user == active_user else ''})" for i, (user, state) in enumerate(users, 1)
     )
 
-    return respond(
-        text=msg if msg else "No users registered. Run /doppel train <user> first."
-    )
+    return respond(text=msg if msg else "No users registered. Run /doppel train <user> first.")
 
 
 @app.function(
@@ -216,9 +208,7 @@ def _asgi_app():
         identity = get_identity(team_id, client)
         bot_id = identity["bot_id"]
 
-        messages = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)[
-            "messages"
-        ]
+        messages = client.conversations_replies(channel=channel_id, ts=ts, limit=1000)["messages"]
         messages.sort(key=lambda m: m["ts"])
 
         user = get_active_user_for_team_id(team_id, users.keys())
@@ -285,13 +275,9 @@ def _asgi_app():
                 return respond(text="Usage: /doppel switch <user>")
             user = cmds[1]
             if user not in users:
-                return respond(
-                    text=f"User {user} not found. Try /doppel list to see all trained users."
-                )
+                return respond(text=f"User {user} not found. Try /doppel list to see all trained users.")
             if not update_active_user(team_id, user):
-                return respond(
-                    text=f"User {user} not trained yet. Run /doppel train <user> first."
-                )
+                return respond(text=f"User {user} not trained yet. Run /doppel train <user> first.")
             return respond(text=f"Switched to {user}.")
         else:
             return respond(
@@ -323,21 +309,17 @@ def _asgi_app():
 @app.function(
     image=slack_image,
     # TODO: Modal should support optional secrets.
-    secrets=(
-        [modal.Secret.from_name("neon-secret")] if MULTI_WORKSPACE_SLACK_APP else []
-    ),
+    secrets=([modal.Secret.from_name("neon-secret")] if MULTI_WORKSPACE_SLACK_APP else []),
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
 )
 def user_pipeline(team_id: str, token: str, user: str, respond):
-    from .db import update_state, delete_user
+    from .db import delete_user, update_state
 
     try:
         respond(text=f"Began scraping {user}.")
         samples = scrape.remote(user, team_id, bot_token=token)
-        respond(
-            text=f"Finished scraping {user} (found {samples} samples), starting training."
-        )
+        respond(text=f"Finished scraping {user} (found {samples} samples), starting training.")
 
         if MULTI_WORKSPACE_SLACK_APP:
             update_state(team_id, user, "training")
@@ -351,9 +333,7 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
         if MULTI_WORKSPACE_SLACK_APP:
             update_state(team_id, user, "trained")
     except Exception as e:
-        respond(
-            text=f"Failed to train {user} ({e}). Try again in a bit, or reach out to support@modal.com!"
-        )
+        respond(text=f"Failed to train {user} ({e}). Try again in a bit, or reach out to support@modal.com!")
         if MULTI_WORKSPACE_SLACK_APP:
             delete_user(team_id, user)
         raise e
