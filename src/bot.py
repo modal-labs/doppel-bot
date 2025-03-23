@@ -179,7 +179,7 @@ def handle_list(team_id: str, users: list[str], respond):
     # Has to outlive both scrape and finetune.
     timeout=60 * 60 * 4,
     volumes={VOL_MOUNT_PATH: output_vol},
-    keep_warm=1,
+    min_containers=1,
 )
 @modal.asgi_app(label="doppel")
 def _asgi_app():

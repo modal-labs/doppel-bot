@@ -30,7 +30,7 @@ MINUTES = 60  # seconds
 @app.cls(
     image=vllm_image,
     gpu="L40S",
-    container_idle_timeout=10 * MINUTES,
+    scaledown_window=10 * MINUTES,
     timeout=5 * MINUTES,
     allow_concurrent_inputs=50,  # depends on model size, GPU RAM, LoRA size and count
     volumes={VOL_MOUNT_PATH: output_vol},

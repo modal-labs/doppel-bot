@@ -99,7 +99,7 @@ def get_user_id_map(client: "WebClient") -> UserIdMap:
     image=slack_image,
     secrets=[modal.Secret.from_name("slack-finetune-secret")],
     timeout=2 * HOURS,
-    concurrency_limit=10,  # Slack API applies rate limits
+    max_containers=10,  # Slack API applies rate limits
 )
 def get_conversations(
     channel: Channel,
