@@ -1,4 +1,5 @@
 import modal
+import os
 from typing import Literal, Optional, Callable
 from pathlib import Path
 
@@ -10,7 +11,7 @@ SYSTEM_PROMPT = """You are {NAME}, an employee at a fast-growing startup. Below 
 
 VOL_MOUNT_PATH = Path("/vol")
 
-MULTI_WORKSPACE_SLACK_APP = False
+MULTI_WORKSPACE_SLACK_APP = os.environ.get("MULTI_WORKSPACE_SLACK_APP") == "1"
 
 WANDB_PROJECT = "slack-finetune"
 
