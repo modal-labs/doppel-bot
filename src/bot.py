@@ -86,6 +86,7 @@ def get_oauth_settings():
             "chat:write",
             "chat:write.customize",
             "commands",
+            "groups:history",
             "users.profile:read",
             "users:read",
         ],
