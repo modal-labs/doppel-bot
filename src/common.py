@@ -13,7 +13,7 @@ Continue the conversation appropriately in the same tone and style.
 
 VOL_MOUNT_PATH = Path("/vol")
 
-MULTI_WORKSPACE_SLACK_APP = True
+MULTI_WORKSPACE_SLACK_APP = False
 
 WANDB_PROJECT = "slack-finetune"
 
