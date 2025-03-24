@@ -53,9 +53,10 @@ class Inference:
 
     @modal.method()
     async def generate(self, inpt: list[dict], user: str, team_id: Optional[str] = None) -> AsyncIterator[str]:
-        checkpoint_path = get_user_checkpoint_path(user, team_id)
         if (ident := f"{user}-{team_id}") not in self.loras:
             self.loras[ident] = len(self.loras) + 1
+            output_vol.reload()
+        checkpoint_path = get_user_checkpoint_path(user, team_id)
         lora_request = LoRARequest(ident, self.loras[ident], lora_local_path=checkpoint_path)
         print(lora_request)
 
