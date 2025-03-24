@@ -22,6 +22,8 @@ slack_cache = modal.Dict.from_name("slack-conversation-dict", create_if_missing=
 
 MINUTES = 60  # seconds
 HOURS = 60 * MINUTES
+MAX_SAMPLES_TO_SCRAPE = 500
+MAX_SAMPLES_PER_CHANNEL = 200
 
 with slack_image.imports():
     from slack_sdk import WebClient
@@ -106,6 +108,7 @@ def get_conversations(
     cutoff_days: int,
     bot_token: str,
     team_id: Optional[str],
+    limit: int,
 ) -> list[Conversation]:
     """Fetch conversations via the Slack API for a given target_user in a given channel.
 
@@ -145,7 +148,7 @@ def get_conversations(
 
         cursor = result["response_metadata"]["next_cursor"]
 
-    print(f"Found {len(threads)} threads in {channel_name}.")
+    print(f"Found {len(threads)} threads in #{channel_name}.")
 
     conversations = []
 
@@ -166,10 +169,10 @@ def get_conversations(
             messages = get_thread_replies_cached(client, ts, channel_id)
         except SlackApiError as e:
             if "ratelimited" in str(e).lower():
-                print("Hit rate limit, returning early")
+                print(f"Hit rate limit, returning early for #{channel_name}.")
                 break
             raise e
-        messages.sort(key=lambda m: m["ts"])
+        messages.sort(key=lambda m: m["ts"], reverse=True)
 
         messages_so_far = []
         for message in messages:
@@ -178,6 +181,12 @@ def get_conversations(
             if is_target(message) and len(message["text"]) > min_message_length:
                 conversation = get_messages_for_slack_thread(messages_so_far, identity, target_user, is_target)
                 conversations.append({"messages": conversation})
+
+        if len(conversations) >= limit:
+            print(f"Hit limit of {limit} conversations in #{channel_name}.")
+            break
+
+    print(f"Scraped {len(conversations)} conversations in #{channel_name} from {len(threads)} threads.")
 
     return conversations
 
@@ -216,24 +225,25 @@ def scrape(
     channels = get_channels(client)
     users = get_user_id_map(client)
 
-    for c in get_conversations.map(
-        channels,
-        kwargs=dict(
+    for c in channels:
+        if (remaining := MAX_SAMPLES_TO_SCRAPE - len(conversations)) <= 0:
+            break
+        new_conversations = get_conversations.remote(
+            c,
             names=users,
             target_user=user,
             min_message_length=min_message_length,
             cutoff_days=cutoff_days,
             bot_token=bot_token,
             team_id=team_id,
-        ),
-    ):
-        conversations.extend(c)
+            limit=min(remaining, MAX_SAMPLES_PER_CHANNEL),
+        )
+        conversations.extend(new_conversations)
 
     path = get_user_data_path(user, team_id)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Limit to (most recent) 1,000 samples.
-    conversations = conversations[-1_000:]
+    conversations = conversations[-MAX_SAMPLES_TO_SCRAPE:]
 
     with open(path, "w") as f:
         json.dump(conversations, f, indent=2)

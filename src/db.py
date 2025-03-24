@@ -9,7 +9,7 @@ from .common import app, slack_image
 with slack_image.imports():
     import psycopg2
 
-MAX_USERS_PER_TEAM = 3
+MAX_USERS_PER_TEAM = 10
 
 
 class UserAlreadyExists(Exception):

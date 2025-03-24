@@ -317,7 +317,7 @@ def user_pipeline(team_id: str, token: str, user: str, respond):
     from .db import delete_user, update_state
 
     try:
-        respond(text=f"Began scraping {user}.")
+        respond(text=f"Began scraping {user}. Note that this may take up to a few hours due to Slack rate limits.")
         samples = scrape.remote(user, team_id, bot_token=token)
         respond(text=f"Finished scraping {user} (found {samples} samples), starting training.")
 
