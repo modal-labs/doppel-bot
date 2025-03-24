@@ -1,42 +1,50 @@
 import json
-import modal
-from typing import Optional
-from datetime import datetime, timedelta, timezone
 import os
-from typing import Iterable
+import time
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+import modal
 
 from .common import (
-    app,
-    Conversation,
     VOL_MOUNT_PATH,
-    output_vol,
-    get_user_data_path,
+    Conversation,
+    app,
     get_messages_for_slack_thread,
+    get_user_data_path,
+    output_vol,
 )
 
-scraper_kwargs = dict(
-    image=modal.Image.debian_slim().pip_install("slack-sdk"),
-    secrets=[modal.Secret.from_name("slack-finetune-secret")],
-)
+slack_image = modal.Image.debian_slim().pip_install("slack-sdk")
 
 # Cache for slack threads.
 slack_cache = modal.Dict.from_name("slack-conversation-dict", create_if_missing=True)
 
 MINUTES = 60  # seconds
 HOURS = 60 * MINUTES
+MAX_SAMPLES_TO_SCRAPE = 500
+MAX_SAMPLES_PER_CHANNEL = 200
 
-
-def make_slack_client(bot_token: str):
+with slack_image.imports():
     from slack_sdk import WebClient
+    from slack_sdk.errors import SlackApiError
     from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 
+
+def make_slack_client(bot_token: str) -> "WebClient":
     class CustomRetryHandler(RateLimitErrorRetryHandler):
         def prepare_for_next_attempt(self, **kwargs):
             super().prepare_for_next_attempt(**kwargs)
-            print("Retrying...", kwargs["request"].url, kwargs["state"].current_attempt)
+            time.sleep(1 * kwargs["state"].current_attempt)
+            print(
+                "Retrying...",
+                kwargs["request"].body_params,
+                kwargs["request"].url,
+                kwargs["state"].current_attempt,
+            )
 
     client = WebClient(token=bot_token)
-    client.retry_handlers.append(CustomRetryHandler(max_retry_count=8))
+    client.retry_handlers.append(CustomRetryHandler(max_retry_count=5))
 
     return client
 
@@ -56,24 +64,18 @@ ChannelName = str
 Channel = tuple[ChannelId, ChannelName]
 
 
-@app.function(**scraper_kwargs)
-def get_channels(bot_token: str) -> Iterable[Channel]:
-    client = make_slack_client(bot_token)
+def get_channels(client: "WebClient") -> list[Channel]:
     result = client.conversations_list(limit=1000)
     channels = result["channels"]
-    for c in channels:
-        if not c["is_shared"] and not c["is_archived"]:
-            yield c["id"], c["name"]
+    return [(c["id"], c["name"]) for c in channels if not c["is_shared"] and not c["is_archived"]]
 
 
 UserDisplayName = UserRealName = str
 UserIdMap = dict[str, tuple[UserDisplayName, UserRealName]]
 
 
-@app.function(**scraper_kwargs)
-def get_user_id_map(bot_token: str) -> UserIdMap:
+def get_user_id_map(client: "WebClient") -> UserIdMap:
     """Produce a dictionary mapping user id to (display name, real name)."""
-    client = make_slack_client(bot_token)
     cursor = None
     user_id_map = {}
     while True:
@@ -93,9 +95,10 @@ def get_user_id_map(bot_token: str) -> UserIdMap:
 
 
 @app.function(
-    **scraper_kwargs,
+    image=slack_image,
+    secrets=[modal.Secret.from_name("slack-finetune-secret")],
     timeout=2 * HOURS,
-    concurrency_limit=10,  # Slack API applies rate limits
+    max_containers=10,  # Slack API applies rate limits
 )
 def get_conversations(
     channel: Channel,
@@ -105,6 +108,7 @@ def get_conversations(
     cutoff_days: int,
     bot_token: str,
     team_id: Optional[str],
+    limit: int,
 ) -> list[Conversation]:
     """Fetch conversations via the Slack API for a given target_user in a given channel.
 
@@ -129,9 +133,7 @@ def get_conversations(
     cursor = None
     threads: list[str] = []
     while True:
-        result = client.conversations_history(
-            channel=channel_id, oldest=cutoff, cursor=cursor, limit=1000
-        )
+        result = client.conversations_history(channel=channel_id, oldest=cutoff, cursor=cursor, limit=1000)
 
         for message in result["messages"]:
             if "bot_id" in message:
@@ -146,7 +148,7 @@ def get_conversations(
 
         cursor = result["response_metadata"]["next_cursor"]
 
-    print(f"Found {len(threads)} threads in {channel_name}.")
+    print(f"Found {len(threads)} threads in #{channel_name}.")
 
     conversations = []
 
@@ -163,24 +165,35 @@ def get_conversations(
         return (display_name == target_user) or (real_name == target_user)
 
     for ts in threads:
-        messages = get_thread_replies_cached(client, ts, channel_id)
-        messages.sort(key=lambda m: m["ts"])
+        try:
+            messages = get_thread_replies_cached(client, ts, channel_id)
+        except SlackApiError as e:
+            if "ratelimited" in str(e).lower():
+                print(f"Hit rate limit, returning early for #{channel_name}.")
+                break
+            raise e
+        messages.sort(key=lambda m: m["ts"], reverse=True)
 
         messages_so_far = []
         for message in messages:
             messages_so_far.append(message)
 
             if is_target(message) and len(message["text"]) > min_message_length:
-                conversation = get_messages_for_slack_thread(
-                    messages_so_far, identity, target_user, is_target
-                )
+                conversation = get_messages_for_slack_thread(messages_so_far, identity, target_user, is_target)
                 conversations.append({"messages": conversation})
+
+        if len(conversations) >= limit:
+            print(f"Hit limit of {limit} conversations in #{channel_name}.")
+            break
+
+    print(f"Scraped {len(conversations)} conversations in #{channel_name} from {len(threads)} threads.")
 
     return conversations
 
 
 @app.function(
-    **scraper_kwargs,
+    image=slack_image,
+    secrets=[modal.Secret.from_name("slack-finetune-secret")],
     retries=modal.Retries(
         max_retries=3,
         initial_delay=5.0,
@@ -204,29 +217,33 @@ def scrape(
     Other arguments are passed to get_conversations. See that function's docstring for details.
     """
     print(f"Beginning scrape for {user}...")
-    bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
-    conversations = []
-    channels = list(get_channels.remote_gen(bot_token))
-    users = get_user_id_map.remote(bot_token)
 
-    for c in get_conversations.map(
-        channels,
-        kwargs=dict(
+    bot_token = bot_token or os.environ["SLACK_BOT_TOKEN"]
+    client = make_slack_client(bot_token)
+
+    conversations = []
+    channels = get_channels(client)
+    users = get_user_id_map(client)
+
+    for c in channels:
+        if (remaining := MAX_SAMPLES_TO_SCRAPE - len(conversations)) <= 0:
+            break
+        new_conversations = get_conversations.remote(
+            c,
             names=users,
             target_user=user,
             min_message_length=min_message_length,
             cutoff_days=cutoff_days,
             bot_token=bot_token,
             team_id=team_id,
-        ),
-    ):
-        conversations.extend(c)
+            limit=min(remaining, MAX_SAMPLES_PER_CHANNEL),
+        )
+        conversations.extend(new_conversations)
 
     path = get_user_data_path(user, team_id)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Limit to (most recent) 30,000 samples.
-    conversations = conversations[-30_000:]
+    conversations = conversations[-MAX_SAMPLES_TO_SCRAPE:]
 
     with open(path, "w") as f:
         json.dump(conversations, f, indent=2)

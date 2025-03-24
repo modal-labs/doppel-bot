@@ -1,5 +1,6 @@
-from typing import AsyncIterator, Optional
 import time
+from typing import AsyncIterator, Optional
+
 import modal
 
 from .common import (
@@ -7,10 +8,9 @@ from .common import (
     SYSTEM_PROMPT,
     VOL_MOUNT_PATH,
     app,
-    output_vol,
     get_user_checkpoint_path,
+    output_vol,
 )
-
 
 vllm_image = modal.Image.debian_slim(python_version="3.12").pip_install(
     "vllm==0.6.3post1", "fastapi[standard]==0.115.4"
@@ -19,10 +19,9 @@ vllm_image = modal.Image.debian_slim(python_version="3.12").pip_install(
 with vllm_image.imports():
     from vllm.engine.arg_utils import AsyncEngineArgs
     from vllm.engine.async_llm_engine import AsyncLLMEngine
+    from vllm.lora.request import LoRARequest
     from vllm.sampling_params import SamplingParams
     from vllm.utils import random_uuid
-
-    from vllm.lora.request import LoRARequest
 
 MINUTES = 60  # seconds
 
@@ -30,7 +29,7 @@ MINUTES = 60  # seconds
 @app.cls(
     image=vllm_image,
     gpu="L40S",
-    container_idle_timeout=10 * MINUTES,
+    scaledown_window=10 * MINUTES,
     timeout=5 * MINUTES,
     allow_concurrent_inputs=50,  # depends on model size, GPU RAM, LoRA size and count
     volumes={VOL_MOUNT_PATH: output_vol},
@@ -53,22 +52,16 @@ class Inference:
         self.loras: dict[str, int] = dict()  # per replica LoRA identifier
 
     @modal.method()
-    async def generate(
-        self, inpt: list[dict], user: str, team_id: Optional[str] = None
-    ) -> AsyncIterator[str]:
+    async def generate(self, inpt: list[dict], user: str, team_id: Optional[str] = None) -> AsyncIterator[str]:
         checkpoint_path = get_user_checkpoint_path(user, team_id)
         if (ident := f"{user}-{team_id}") not in self.loras:
             self.loras[ident] = len(self.loras) + 1
-        lora_request = LoRARequest(
-            ident, self.loras[ident], lora_local_path=checkpoint_path
-        )
+        lora_request = LoRARequest(ident, self.loras[ident], lora_local_path=checkpoint_path)
         print(lora_request)
 
         tokenizer = await self.engine.get_tokenizer(lora_request=lora_request)
 
-        prompt = tokenizer.apply_chat_template(
-            conversation=inpt, tokenize=False, add_generation_prompt=True
-        )
+        prompt = tokenizer.apply_chat_template(conversation=inpt, tokenize=False, add_generation_prompt=True)
         sampling_params = SamplingParams(
             repetition_penalty=1.1,
             temperature=0.2,

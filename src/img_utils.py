@@ -1,6 +1,7 @@
-from PIL import Image
-import requests
 from io import BytesIO
+
+import requests
+from PIL import Image
 
 
 def overlay_disguise(avatar_url: str) -> bytes:
